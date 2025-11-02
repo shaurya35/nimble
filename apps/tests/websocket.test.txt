@@ -76,7 +76,7 @@ describe("WebSocket Server End-to-End Tests", () => {
   describe("Create Todo Operations", () => {
     const validMessage = {
       message: "Add buy groceries",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY,
       model: "gemini-2.5-flash",
       config: {},
       existingTodos: "[]",
@@ -157,7 +157,7 @@ describe("WebSocket Server End-to-End Tests", () => {
 
     const validMessage = {
       message: "Mark buy groceries as done",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY || "",
       model: "gemini-2.5-flash",
       config: {},
       existingTodos,
@@ -194,7 +194,7 @@ describe("WebSocket Server End-to-End Tests", () => {
 
     const validMessage = {
       message: "Delete buy groceries",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY || "",
       model: "gemini-2.5-flash",
       config: {},
       existingTodos,
@@ -233,7 +233,7 @@ describe("WebSocket Server End-to-End Tests", () => {
 
     const validMessage = {
       message: "Show my todos",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY || "",
       model: "gemini-2.5-flash",
       config: {},
       existingTodos,
@@ -252,7 +252,7 @@ describe("WebSocket Server End-to-End Tests", () => {
   describe("Date Calculation", () => {
     const validMessage = {
       message: "",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY || "",
       model: "gemini-2.5-flash",
       config: {},
       existingTodos: "[]",
@@ -303,7 +303,7 @@ describe("WebSocket Server End-to-End Tests", () => {
   describe("Complex Scenarios", () => {
     const validMessage = {
       message: "",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY || "",
       model: "gemini-2.5-flash",
       config: {},
       existingTodos: "[]",
@@ -347,7 +347,7 @@ describe("WebSocket Server End-to-End Tests", () => {
   describe("Response Format", () => {
     const validMessage = {
       message: "Add test todo",
-      apiKey: process.env.GEMINI_API_KEY || "AIzaSyBgNF8_MxYzjBs-37Lor4OwcMVJ_LiNnqk",
+      apiKey: process.env.GEMINI_API_KEY || "",
       model: "gemini-2.5-flash",
       config: {},
       existingTodos: "[]",
