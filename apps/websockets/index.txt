@@ -1,0 +1,174 @@
+import { WebSocketServer } from "ws";
+import { convertor } from "./functions";
+
+interface ClientMessage {
+  message: string;
+  apiKey: string;
+  model: string;
+  config: object;
+  existingTodos?: string;
+}
+
+interface ServerResponse {
+  success: boolean;
+  command?: string;
+  operation?: {
+    type: string;
+    todoId?: string;
+    data?: object;
+    localStorageCommand?: string;
+  };
+  error?: string;
+  todos?: any[];
+}
+
+const wss = new WebSocketServer({ port: 8000 });
+
+wss.on("connection", (ws, req) => {
+  const clientIP = req.socket.remoteAddress;
+  console.log(`Client Connected: ${wss.clients.size} (IP: ${clientIP})`);
+
+  ws.on("message", async (rawMessage) => {
+    try {
+      const messageStr = rawMessage.toString();
+      console.log(`Message Received: ${messageStr}`);
+
+      let clientData: ClientMessage;
+      try {
+        clientData = JSON.parse(messageStr);
+      } catch (parseError) {
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error:
+              "Invalid JSON format. Expected: {message, apiKey, model, config, existingTodos?}",
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      if (!clientData.message || typeof clientData.message !== "string") {
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error: "Message field is required and must be a string",
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      if (!clientData.apiKey || typeof clientData.apiKey !== "string") {
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error: "apiKey field is required and must be a string",
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      if (!clientData.model || typeof clientData.model !== "string") {
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error: "model field is required and must be a string",
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      if (!clientData.config || typeof clientData.config !== "object") {
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error: "config field is required and must be an object",
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      const apiKey = clientData.apiKey;
+      const model = clientData.model;
+      const config = clientData.config;
+      const existingTodos = clientData.existingTodos || "";
+
+      const aiResponse = await convertor(
+        clientData.message,
+        apiKey,
+        model,
+        config,
+        existingTodos
+      );
+
+      let operation: any;
+      try {
+        const cleanedResponse = aiResponse
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
+
+        operation = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error("Failed to parse AI response:", aiResponse);
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error: `Failed to parse AI response: ${parseError}`,
+            rawResponse: aiResponse,
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      if (!operation.type || !operation.localStorageCommand) {
+        ws.send(
+          JSON.stringify({
+            success: false,
+            error: "Invalid operation structure from AI",
+            operation,
+          } as ServerResponse)
+        );
+        return;
+      }
+
+      const response: ServerResponse = {
+        success: true,
+        command: operation.localStorageCommand,
+        operation: {
+          type: operation.type,
+          todoId: operation.todoId,
+          data: operation.data,
+          localStorageCommand: operation.localStorageCommand,
+        },
+      };
+
+      if (operation.type === "list" && existingTodos) {
+        try {
+          response.todos = JSON.parse(existingTodos);
+        } catch {}
+      }
+
+      ws.send(JSON.stringify(response));
+      console.log(`Command sent to client: ${operation.type}`);
+    } catch (error) {
+      console.error("Error processing message:", error);
+      ws.send(
+        JSON.stringify({
+          success: false,
+          error:
+            error instanceof Error ? error.message : "Unknown error occurred",
+        } as ServerResponse)
+      );
+    }
+  });
+
+  ws.on("close", () => {
+    console.log(`Client Disconnected: ${wss.clients.size} remaining`);
+  });
+
+  ws.on("error", (error) => {
+    console.error("WebSocket error:", error);
+  });
+});
+
+console.log("WebSocket server listening on ws://localhost:8000");
