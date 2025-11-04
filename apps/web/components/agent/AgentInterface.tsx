@@ -88,7 +88,7 @@ export default function AgentInterface(){
                         <NotebookPen className="h-3.5 w-3.5" />
                     </div>
                     <span className="font-medium">Agent</span>
-                    <span className="text-muted-foreground">for current note</span>
+                    {/* <span className="text-muted-foreground">for current note</span> */}
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="text-muted-foreground transition-all group-hover:pr-2">

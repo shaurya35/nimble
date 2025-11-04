@@ -26,6 +26,14 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { getFolders, getNotes, setFolders, setNotes, deleteFolder, deleteNote } from "@/services/localstorage"
+// custom sidebar preloader
+function SidebarLoader(){
+  return (
+    <div className="py-4 flex items-center justify-center">
+      <div className="h-5 w-5 rounded-full border-2 border-muted border-t-transparent animate-spin" aria-label="Loading" />
+    </div>
+  );
+}
 
 const dummy = {
   user: {
@@ -143,7 +151,7 @@ const data = {
   user: {
     name: "Nimble Agent",
     email: "Hi there",
-    avatar: "/avatars/shadcn.jpg",
+    avatar: "https://github.com/shadcn.png",
   },
   teams: [
     {
@@ -157,6 +165,7 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [folders, setFoldersState] = React.useState<any[]>([]);
   const [notes, setNotesState] = React.useState<any[]>([]);
+  const [loading, setLoading] = React.useState(true);
   const { selectedNoteId, setSelectedNoteId } = useSelectedNote();
   const [addMode, setAddMode] = React.useState(false);
   const [newFolderName, setNewFolderName] = React.useState("");
@@ -214,6 +223,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     const notesData = getNotes();
     setFoldersState(foldersData);
     setNotesState(notesData);
+    setLoading(false);
     const onNotes = () => setNotesState(getNotes());
     const onFolders = () => setFoldersState(getFolders());
     if (typeof window !== "undefined") {
@@ -369,6 +379,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
+        {loading ? (
+          <SidebarLoader />
+        ) : (
         <NavMain
           items={navMainItems}
           onSelectNote={(id) => setSelectedNoteId(id)}
@@ -394,6 +407,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           onConfirmAdd={handleConfirmAdd}
           onCancelAdd={handleCancelAdd}
         />
+        )}
         {/* <NavProjects projects={dummy.projects} /> */}
       </SidebarContent>
       <SidebarFooter>
