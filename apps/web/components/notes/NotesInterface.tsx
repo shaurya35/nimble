@@ -34,22 +34,22 @@ export default function NotesInterface(){
 
 	if (!selected) {
 		return (
-			<div className="font-sans p-4 text-sm text-muted-foreground">
+			<div className="font-sans h-full flex items-center justify-center p-4 text-sm text-muted-foreground">
 				Select a note from the sidebar to view and edit.
 			</div>
 		);
 	}
 
 	return (
-		<div className="font-sans p-6 space-y-4">
+		<div className="font-sans h-full flex flex-col p-6">
 			<input
-				className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-neutral-400"
+				className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-neutral-400 mb-4 flex-shrink-0"
 				placeholder="Untitled"
 				value={title}
 				onChange={(e) => setTitle(e.target.value)}
 			/>
 			<textarea
-				className="w-full min-h-[60vh] bg-transparent outline-none resize-none text-sm whitespace-pre-wrap"
+				className="w-full flex-1 bg-transparent outline-none resize-none text-sm whitespace-pre-wrap overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
 				placeholder="Start writing..."
 				value={content}
 				onChange={(e) => setContent(e.target.value)}

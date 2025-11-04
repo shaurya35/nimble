@@ -52,7 +52,7 @@ export default function Page() {
             <div className="bg-muted/50 aspect-video rounded-xl" />
             <div className="bg-muted/50 aspect-video rounded-xl" />
           </div> */}
-          <div className="bg-muted/50 min-h-screen flex-1 rounded-xl md:min-h-min" >
+          <div className="bg-muted/50 flex-1 rounded-xl h-full flex flex-col" >
             <NotesInterface/>
           </div>
           <div className="bg-muted/50 max-h-screen rounded-xl md:min-h-min w-[30%]">

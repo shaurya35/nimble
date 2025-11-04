@@ -25,7 +25,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { getFolders, getNotes, setFolders, setNotes, deleteFolder, deleteNote } from "@/services/localstorage"
+import { getFolders, getNotes, setFolders, setNotes, deleteFolder, deleteNote, updateFolder } from "@/services/localstorage"
 // custom sidebar preloader
 function SidebarLoader(){
   return (
@@ -173,6 +173,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [newNoteTitle, setNewNoteTitle] = React.useState("");
   const [pickingFolderId, setPickingFolderId] = React.useState<string | null>(null);
   const [pickingPosition, setPickingPosition] = React.useState<{ x: number; y: number } | null>(null);
+  const [editingFolderId, setEditingFolderId] = React.useState<string | null>(null);
+  const [editFolderName, setEditFolderName] = React.useState("");
 
   const lucideIcons = [
     AudioWaveform,
@@ -372,13 +374,40 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setNewFolderName("");
   };
 
+  const handleStartEditFolder = (folderId: string) => {
+    const folder = folders.find((f: any) => String(f.id) === String(folderId));
+    setEditingFolderId(folderId);
+    setEditFolderName(folder?.name || "");
+  };
+
+  const handleConfirmEditFolder = () => {
+    if (!editingFolderId) return;
+    const name = editFolderName.trim();
+    if (!name) {
+      handleCancelEditFolder();
+      return;
+    }
+    const folder = folders.find((f: any) => String(f.id) === String(editingFolderId));
+    if (!folder) return;
+    const updated = { ...folder, name };
+    updateFolder(String(editingFolderId), updated);
+    setFoldersState(getFolders());
+    setEditingFolderId(null);
+    setEditFolderName("");
+  };
+
+  const handleCancelEditFolder = () => {
+    setEditingFolderId(null);
+    setEditFolderName("");
+  };
+
 
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent className="[scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {loading ? (
           <SidebarLoader />
         ) : (
@@ -386,6 +415,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           items={navMainItems}
           onSelectNote={(id) => setSelectedNoteId(id)}
           onDeleteFolder={handleDeleteFolder}
+          onStartEditFolder={handleStartEditFolder}
+          editingFolderId={editingFolderId}
+          editFolderName={editFolderName}
+          onChangeEditFolderName={setEditFolderName}
+          onConfirmEditFolder={handleConfirmEditFolder}
+          onCancelEditFolder={handleCancelEditFolder}
           onStartPickIcon={handleStartPickIcon}
           pickingFolderId={pickingFolderId}
           pickingPosition={pickingPosition}

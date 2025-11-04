@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronRight, Plus, Trash2, type LucideIcon } from "lucide-react";
+import { ChevronRight, Plus, Trash2, Pencil, FolderPlus, FileText, Sparkles, Lightbulb, Zap, BookOpen, CircleDot, type LucideIcon } from "lucide-react";
 
 import {
   Collapsible,
@@ -17,6 +17,7 @@ import {
   SidebarMenuSub,
   SidebarMenuSubButton,
   SidebarMenuSubItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 
 export function NavMain({
@@ -24,6 +25,12 @@ export function NavMain({
   onSelectNote,
   onAddNote,
   onDeleteFolder,
+  onStartEditFolder,
+  editingFolderId,
+  editFolderName,
+  onChangeEditFolderName,
+  onConfirmEditFolder,
+  onCancelEditFolder,
   onStartPickIcon,
   pickingFolderId,
   pickingPosition,
@@ -59,6 +66,12 @@ export function NavMain({
   onSelectNote?: (noteId: string) => void;
   onAddNote?: (folderId: string | null) => void;
   onDeleteFolder?: (folderId: string) => void;
+  onStartEditFolder?: (folderId: string) => void;
+  editingFolderId?: string | null;
+  editFolderName?: string;
+  onChangeEditFolderName?: (value: string) => void;
+  onConfirmEditFolder?: () => void;
+  onCancelEditFolder?: () => void;
   onStartPickIcon?: (folderId: string, pos: { x: number; y: number }) => void;
   pickingFolderId?: string | null;
   pickingPosition?: { x: number; y: number } | null;
@@ -79,6 +92,7 @@ export function NavMain({
   onConfirmAdd?: () => void;
   onCancelAdd?: () => void;
 }) {
+  const { state } = useSidebar();
   const [openById, setOpenById] = React.useState<Record<string, boolean>>({});
   const OPEN_KEY = "folderOpenState";
 
@@ -158,6 +172,20 @@ export function NavMain({
         </button>
       </SidebarGroupLabel>
       <SidebarMenu className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+        {items.length === 0 && !addMode && state === "expanded" ? (
+          <div className="px-2 py-6 flex flex-col items-center justify-center text-center space-y-1.5">
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-muted/30">
+              <FolderPlus className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div className="space-y-0.5">
+              <p className="text-xs font-medium">No folders yet</p>
+              <p className="text-xs text-muted-foreground">
+                Start by creating your first folder
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
         {items.map((item) => (
           <Collapsible
             key={String((item as any).id ?? item.title)}
@@ -196,25 +224,58 @@ export function NavMain({
                   >
                     {item.icon && <item.icon />}
                   </span>
-                  <span className="ml-2 block w-full overflow-hidden text-ellipsis whitespace-nowrap">{item.title}</span>
+                  {editingFolderId === (item as any).id ? (
+                    <input
+                      autoFocus
+                      value={editFolderName}
+                      onChange={(e) => onChangeEditFolderName?.(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') onConfirmEditFolder?.();
+                        if (e.key === 'Escape') onCancelEditFolder?.();
+                      }}
+                      onBlur={() => onCancelEditFolder?.()}
+                      className="ml-2 flex-1 bg-transparent outline-none border-b border-primary"
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                  ) : (
+                    <span className="ml-2 block overflow-hidden text-ellipsis whitespace-nowrap transition-all group-hover/item:max-w-[calc(100%-5rem)] max-w-full">{item.title}</span>
+                  )}
                   <div className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden">
                     {typeof (item as any).id !== 'undefined' && (item as any).id !== "" && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteFolder?.(String((item as any).id));
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') onDeleteFolder?.(String((item as any).id));
-                        }}
-                        aria-label="Delete folder"
-                        title="Delete folder"
-                      >
-                        <Trash2 size={14} />
-                      </span>
+                      <>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onStartEditFolder?.(String((item as any).id));
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') onStartEditFolder?.(String((item as any).id));
+                          }}
+                          aria-label="Edit folder name"
+                          title="Edit folder name"
+                        >
+                          <Pencil size={14} />
+                        </span>
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onDeleteFolder?.(String((item as any).id));
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') onDeleteFolder?.(String((item as any).id));
+                          }}
+                          aria-label="Delete folder"
+                          title="Delete folder"
+                        >
+                          <Trash2 size={14} />
+                        </span>
+                      </>
                     )}
                     <span
                       role="button"
@@ -313,6 +374,8 @@ export function NavMain({
               />
             </div>
           </SidebarMenuItem>
+        )}
+          </>
         )}
       </SidebarMenu>
       {pickingFolderId && iconOptions && pickingPosition && (
