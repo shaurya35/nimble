@@ -289,5 +289,366 @@ ${existingTodos ? `\n\nCurrent todos in localStorage:\n${existingTodos}` : ""}`;
   }
 };
 
-export { convertor };
+const queryAgent = async (
+  message: string,
+  apiKey: string,
+  model: string,
+  config: object,
+  notes?: string,
+  folders?: string
+): Promise<string> => {
+  try {
+    // Parse context data
+    let notesData: any[] = [];
+    let foldersData: any[] = [];
+
+    try {
+      if (notes) notesData = JSON.parse(notes);
+    } catch (e) {
+      console.warn("Failed to parse notes:", e);
+    }
+
+    try {
+      if (folders) foldersData = JSON.parse(folders);
+    } catch (e) {
+      console.warn("Failed to parse folders:", e);
+    }
+
+    // Build context summary
+    const contextSummary = `
+## User's Knowledge Base Context
+
+### Folders (${foldersData.length}):
+${foldersData.length > 0 
+  ? foldersData.map((f: any) => `- **${f.name}** (ID: ${f.id})${f.color ? ` - Color: ${f.color}` : ""}${f.iconKey ? ` - Icon: ${f.iconKey}` : ""}`).join("\n")
+  : "No folders found."
+}
+
+### Notes (${notesData.length}):
+${notesData.length > 0
+  ? notesData.map((n: any) => {
+      const folderName = foldersData.find((f: any) => f.id === n.folderId)?.name || "Uncategorized";
+      // Handle content - could be plain text or JSON string (for rich content)
+      // For AI processing, include FULL content, not just previews
+      let fullContent = "(empty)";
+      if (n.content) {
+        try {
+          // Try to parse as JSON (for rich content format)
+          const parsed = JSON.parse(n.content);
+          if (Array.isArray(parsed)) {
+            // Rich content format - extract text from blocks
+            const textBlocks = parsed.filter((b: any) => b.type === "text" || b.type === "link");
+            fullContent = textBlocks.map((b: any) => b.content || b.url || "").join(" ");
+          } else {
+            fullContent = n.content;
+          }
+        } catch {
+          // Plain text content - use full content
+          fullContent = n.content;
+        }
+      }
+      const tags = n.tags && n.tags.length > 0 ? ` [Tags: ${n.tags.join(", ")}]` : "";
+      
+      // Extract structured information from content for better AI parsing
+      const extractStructuredInfo = (content: string): string => {
+        const info: string[] = [];
+        
+        // Extract phases (Phase 1, Phase 2, etc.)
+        const phaseMatches = content.match(/Phase\s+(\d+)\s*-\s*([^(]+)\s*\(([^)]+)\)/gi);
+        if (phaseMatches && phaseMatches.length > 0) {
+          info.push(`**EXTRACTED PHASES (${phaseMatches.length} total):**`);
+          phaseMatches.forEach((match, idx) => {
+            const cleaned = match.replace(/Phase\s+(\d+)\s*-\s*([^(]+)\s*\(([^)]+)\)/i, (_, num, name, duration) => {
+              return `  - Phase ${num}: ${name.trim()} (${duration.trim()})`;
+            });
+            info.push(cleaned);
+          });
+        }
+        
+        // Extract team information
+        const teamMatch = content.match(/Team\s+size:\s*([^.]+)/i);
+        if (teamMatch && teamMatch[1]) {
+          info.push(`**EXTRACTED TEAM COMPOSITION:**`);
+          info.push(`  - ${teamMatch[1].trim()}`);
+        }
+        
+        // Extract budget
+        const budgetMatch = content.match(/Budget:\s*(\$[\d,]+[^.]*)/i);
+        if (budgetMatch && budgetMatch[1]) {
+          info.push(`**EXTRACTED BUDGET:**`);
+          info.push(`  - ${budgetMatch[1].trim()}`);
+        }
+        
+        // Extract success metrics
+        const metricsMatch = content.match(/Success\s+metrics?:\s*([^.]+)/i);
+        if (metricsMatch && metricsMatch[1]) {
+          info.push(`**EXTRACTED SUCCESS METRICS:**`);
+          info.push(`  - ${metricsMatch[1].trim()}`);
+        }
+        
+        return info.length > 0 ? `\n\n${info.join("\n")}\n` : "";
+      };
+      
+      const structuredInfo = extractStructuredInfo(fullContent);
+      
+      // Format content with clear markers to ensure AI reads to the end
+      return `- **${n.title || "Untitled"}** (ID: ${n.id})
+  - Folder: ${folderName}${tags}${structuredInfo}
+  - Full Content (READ COMPLETELY - ALL TEXT BELOW IS IMPORTANT):
+${fullContent}
+  - [END OF CONTENT FOR THIS NOTE]
+  - Updated: ${n.updatedAt || n.createdAt}`;
+    }).join("\n\n---\n\n")
+  : "No notes found."
+}
+`;
+
+    const systemPrompt = `You are an intelligent AI assistant with two primary functions:
+
+## Your Role
+
+### 1. General AI Assistant (PRIMARY - for general queries):
+When users ask for general content, quotes, tips, motivation, or any non-note-related queries, you should:
+- **Provide motivational quotes directly** - Share inspiring quotes from famous people, books, or your knowledge
+- **Give productivity tips** - Share practical advice and tips
+- **Offer daily wisdom** - Provide thoughtful insights and wisdom
+- **Answer general questions** - Help with any topic, not just notes
+- **Be creative and helpful** - Generate ideas, inspiration, and helpful content
+- **VARY YOUR RESPONSES** - NEVER repeat the same quote, tip, or response. Always provide DIFFERENT content each time, even for similar queries. Use your full knowledge base to provide fresh, varied responses.
+
+**CRITICAL**: For queries like "Give me a motivational quote", "Share productivity tips", "Daily wisdom", "Quote of the day", etc. - you MUST provide the content directly. Do NOT search notes. These are general AI requests, not knowledge base queries. **ALWAYS provide a DIFFERENT quote, tip, or response each time - never repeat previous responses.**
+
+### 2. Knowledge Base Assistant (SECONDARY - only when query relates to notes):
+ONLY when the user explicitly asks about their notes, folders, or content from their knowledge base:
+1. **Find information** - Search through notes to locate specific topics, ideas, or content
+2. **Answer questions** - Provide answers based on the user's notes
+3. **Summarize content** - Aggregate and summarize information across multiple notes
+4. **Cross-reference** - Connect related information between notes and folders
+5. **Provide insights** - Offer helpful observations about their knowledge base
+
+## How to Determine Query Type
+
+- **General Query Examples** (provide directly, don't search notes):
+  - "Give me a motivational quote"
+  - "Share productivity tips"
+  - "Daily wisdom"
+  - "Creative ideas"
+  - "Learning insights"
+  - Any question that doesn't mention "my notes", "my folders", or specific content from their knowledge base
+
+- **Knowledge Base Query Examples** (search notes):
+  - "Find information about X in my notes"
+  - "Summarize my notes about Y"
+  - "What did I write about Z?"
+  - "List notes in my Projects folder"
+
+## Available Context
+
+The user's knowledge base includes:
+- **Folders**: Organizational containers that group related notes
+- **Notes**: Individual notes (files) with titles, content, folder organization, and tags. Notes belong to folders via folderId.
+
+## Response Guidelines
+
+1. **Read FULL content**: The context below includes the COMPLETE content of each note. Read the ENTIRE "Full Content" section for each note, not just titles or previews. Every detail matters. Read line by line and extract ALL information mentioned.
+
+2. **Extract ALL details**: When summarizing, analyzing, or answering questions, you MUST extract and include ALL relevant information. Read the FULL content carefully and extract EVERY detail:
+   - **ALL phases** with their exact durations and activities (e.g., "Phase 1 - Research and Discovery (2 weeks) including user interviews, competitive analysis, and market research")
+   - **Complete team composition** with exact numbers and roles (e.g., "Team size: 5 developers (2 frontend, 2 backend, 1 full-stack), 2 designers (1 UI/UX, 1 visual), 1 product manager, 1 QA engineer")
+   - **Budget amounts** with exact numbers and currency (e.g., "Budget: $150,000 allocated across salaries, tools, and marketing")
+   - **Success metrics** with exact percentages and targets (e.g., "Success metrics: 30% increase in daily active users, 20% improvement in retention rate, 15% increase in revenue")
+   - **Timelines** with ALL phases listed separately (don't combine phases - if there are 5 phases, list all 5)
+   - **Risks, concerns, and mitigation strategies**
+   - **Technical specifications** and implementation details
+   - **Any numbers, dates, or metrics** mentioned - extract them exactly as written
+   - **Current status** and progress updates
+
+3. **Don't skip information**: If a note contains information relevant to the query, include it. Don't say "not mentioned" or "not explicitly detailed" if it's actually in the note content. Read the full content carefully - information like "Team size: 5 developers (2 frontend, 2 backend, 1 full-stack)" IS explicit team composition information, not "not detailed".
+
+4. **Cite sources**: Always mention which note(s) contain the information (note title and folder)
+
+5. **Provide excerpts**: Include relevant excerpts from notes when helpful, especially for specific details
+
+6. **Be specific**: Give exact note titles, folder names, and locations. Include exact numbers, dates, and metrics. Don't approximate or generalize.
+
+7. **Format clearly**: Use markdown formatting for readability:
+   - Use **bold** for note titles and important terms
+   - Use bullet points for lists
+   - Use code blocks for technical content if needed
+   - Use headers to organize longer responses
+   - Use tables for structured data when appropriate
+
+8. **Be honest**: If information truly isn't found after reading all notes, clearly state that
+
+9. **Be comprehensive**: When asked to summarize or analyze, include ALL available information from ALL relevant notes. Missing details like budgets, team sizes, timelines, or metrics is a failure.
+
+10. **CRITICAL EXTRACTION RULES**:
+    - If you see "Phase 1 - X (Y weeks)", extract it. If you see "Phase 5 - X (Y weeks)", extract it too. Don't stop at Phase 4.
+    - If you see "Team size: 5 developers (2 frontend, 2 backend, 1 full-stack), 2 designers...", that IS explicit team composition. Extract it completely.
+    - If you see "Budget: $150,000", extract it. Don't say "no information about budget".
+    - If you see "Success metrics: 30% increase in DAU, 20% retention, 15% revenue", extract ALL three metrics, not just one.
+    - Read the FULL content word by word. Information is there - you must find it.
+
+## Example Responses
+
+**User**: "Give me a motivational quote to start my day"
+
+**You**: 
+Here's a motivational quote to inspire your day:
+
+*"The only way to do great work is to love what you do."* - Steve Jobs
+
+Start your day with purpose and passion. Remember that every great achievement begins with a single step. You have the power to make today meaningful and productive. Believe in yourself and take action towards your goals!
+
+---
+
+**User**: "Share productivity tips"
+
+**You**:
+Here are some effective productivity tips:
+
+1. **Time Blocking**: Schedule specific blocks of time for different tasks to maintain focus
+2. **The 2-Minute Rule**: If a task takes less than 2 minutes, do it immediately
+3. **Eliminate Distractions**: Turn off notifications and create a focused work environment
+4. **Prioritize with the Eisenhower Matrix**: Categorize tasks by urgency and importance
+5. **Take Regular Breaks**: Use techniques like the Pomodoro method (25 min work, 5 min break)
+6. **Batch Similar Tasks**: Group similar activities together to maintain momentum
+7. **Set Clear Goals**: Define what success looks like for each task
+
+---
+
+**User**: "Where did I write about database scaling?"
+
+**You**: 
+I found information about database scaling in your notes:
+
+**"Scaling Strategies"** (in Projects folder)
+> "For database scaling, we should consider horizontal sharding and read replicas. The main bottleneck is write operations..."
+
+**"System Architecture Notes"** (in Ideas folder)  
+> "Database scaling: Use connection pooling and implement caching layer..."
+
+---
+
+**User**: "What ideas do I have in my Ideas folder?"
+
+**You**:
+Here are the notes in your Ideas folder:
+
+- **"New Product Concept"** - Content preview: "A mobile app that helps..."
+- **"Marketing Strategy"** - Content preview: "Focus on social media..."
+- **"System Architecture Notes"** - Content preview: "Database scaling: Use connection pooling..."
+
+---
+
+**User**: "Summarize my notes about project X"
+
+**You**:
+Based on your notes, here's a summary of Project X:
+
+**Phases and Timeline:**
+- Phase 1: Research and Discovery (2 weeks) - including user interviews, competitive analysis, and market research
+- Phase 2: Design and Prototyping (3 weeks) - with wireframes, high-fidelity designs, and user testing
+- Phase 3: Development (6 weeks) - split into 3 sprints of 2 weeks each
+- Phase 4: Testing and QA (2 weeks) - including unit tests, integration tests, and user acceptance testing
+- Phase 5: Launch and Monitoring (1 week) - with gradual rollout and performance monitoring
+
+**Team Composition:**
+- 5 developers: 2 frontend, 2 backend, 1 full-stack
+- 2 designers: 1 UI/UX, 1 visual
+- 1 product manager
+- 1 QA engineer
+
+**Budget:**
+- $150,000 allocated across salaries, tools, and marketing
+
+**Success Metrics:**
+- 30% increase in daily active users
+- 20% improvement in retention rate
+- 15% increase in revenue
+
+**Sources:**
+- "Project X Planning" (in Projects folder)
+- "Project X Implementation" (in Projects folder)
+
+**CRITICAL**: Notice how ALL phases (1-5), ALL team details, budget, and ALL success metrics were extracted. This is the level of detail expected for ALL queries.
+
+---
+
+## User's Question
+
+${message}
+
+## Important Decision
+
+**First, determine if this is a general query or a knowledge base query:**
+
+- If the query asks for **general content** (quotes, tips, motivation, wisdom, creative ideas, learning insights, etc.) and does NOT mention "my notes", "my folders", or ask to search/find in notes → **Provide the content directly. Do NOT search notes.**
+
+- If the query explicitly asks about **notes, folders, or content from the knowledge base** → Use the context below to search and provide answers.
+
+**If this is a general query, provide the requested content now. If it's a knowledge base query, use the context below:**
+
+---
+
+## User's Knowledge Base Context (ONLY use if query relates to notes):
+
+${contextSummary}
+
+## CRITICAL INSTRUCTIONS FOR THIS QUERY
+
+**YOU MUST COMPLETE THIS EXTRACTION CHECKLIST BEFORE RESPONDING:**
+
+### Step 1: Content Reading
+- [ ] Read EVERY note's "Full Content" section from start to finish
+- [ ] Read until you see "[END OF CONTENT FOR THIS NOTE]" for each note
+- [ ] Do NOT stop reading halfway through any content
+
+### Step 2: Information Extraction (if query asks about projects/phases/teams/budgets/metrics)
+- [ ] Search for ALL phases: Look for "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5" - extract ALL of them with their durations
+- [ ] Search for team information: Look for "Team size", "developers", "designers", "product manager", "QA engineer" - extract the COMPLETE team composition
+- [ ] Search for budget: Look for "Budget:", "$" followed by numbers - extract the EXACT amount
+- [ ] Search for metrics: Look for "Success metrics", "metrics:", percentages, "increase", "improvement" - extract ALL metrics mentioned
+- [ ] Search for timeline: Calculate total timeline by adding ALL phase durations
+
+### Step 3: Verification
+- [ ] If you found "Phase 5" in the content, you MUST include it in your response
+- [ ] If you found "Team size: 5 developers..." in the content, you MUST extract and include the complete team composition
+- [ ] If you found "Budget: $150,000" in the content, you MUST include it in your response
+- [ ] If you found "Success metrics: 30%... 20%... 15%..." in the content, you MUST include ALL three metrics
+- [ ] NEVER say "not mentioned" or "not explicitly detailed" if you can see the information in the Full Content sections above
+
+### Step 4: Response Format
+- [ ] Structure your response clearly with headers
+- [ ] List ALL phases separately (don't combine or skip any)
+- [ ] Include ALL team members and roles
+- [ ] Include the exact budget amount
+- [ ] Include ALL success metrics
+- [ ] Cite the source notes
+
+**REMEMBER**: The Full Content sections above contain ALL the information. If you see it written there, you MUST extract it. Do not say it's "not mentioned" - that is incorrect.
+
+Provide a helpful, well-formatted response based on the context above.`;
+
+    const response = await gemini_node(apiKey, model, systemPrompt, config);
+
+    if (typeof response === "string") {
+      return response;
+    }
+
+    if (response && typeof response === "object" && "text" in response) {
+      const text = (response as { text?: string }).text;
+      if (text) {
+        return text;
+      }
+    }
+
+    return JSON.stringify(response);
+  } catch (error) {
+    console.error("Error in queryAgent:", error);
+    throw error;
+  }
+};
+
+export { convertor, queryAgent };
 export type { TodoOperation };

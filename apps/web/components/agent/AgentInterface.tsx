@@ -1,9 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { Play, Loader2, Clipboard, Check, Sparkles, Wand2, ListTodo, NotebookPen, Trash2, Zap, Command, Bot } from "lucide-react"
+import { Play, Loader2, Clipboard, Check, Sparkles, Wand2, ListTodo, NotebookPen, Trash2, Zap, Command, Bot, Eye, EyeOff, Key, Pencil, X, Sunrise, Lightbulb, Target, BookOpen, Coffee, TrendingUp, Brain, Rocket, Search, BarChart3, Link2, FileText, GitBranch, Sparkles as SparklesIcon, BookOpen as BookOpenIcon, RefreshCw, CheckSquare, KeyRound } from "lucide-react"
 import { useSelectedNote } from "@/components/notes/selected-note-context"
-import { getNotes } from "@/services/localstorage"
+import { getNotes, getFolders } from "@/services/localstorage"
 
 type RunStatus = "queued" | "running" | "success" | "error"
 
@@ -15,6 +15,25 @@ type Run = {
     output: string
 }
 
+// WebSocket server URL - adjust for production
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000"
+
+// API Key - get from localStorage or environment variable
+const getApiKey = (): string => {
+    if (typeof window === "undefined") return ""
+    // Check localStorage first, then env variable
+    const stored = localStorage.getItem("gemini_api_key")
+    if (stored) return stored
+    return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
+}
+
+// Model configuration
+const DEFAULT_MODEL = "gemini-2.5-flash"
+const DEFAULT_CONFIG = {
+    temperature: 0.3,
+    maxTokens: 4000
+}
+
 function useSelectedNoteData(){
     const { selectedNoteId } = useSelectedNote()
     const notes = getNotes()
@@ -22,56 +41,175 @@ function useSelectedNoteData(){
     return note
 }
 
-function formatOutput(kind: string, text: string, title: string){
-    const body = text || ""
-    if(!body.trim()) return "No content in the current note."
-    const lines = body.split(/\r?\n/)
-    const cleaned = lines
-        .map(l => l.replace(/^[-*>\s]+/, "").trim())
-        .filter(l => l.length > 0)
-    switch(kind){
-        case "summarize":
-            return `Summary of ${title || "Untitled"}:\n` + cleaned.slice(0,5).join(" ")
-        case "bullets":
-            return [title ? `• ${title}` : null, ...cleaned.slice(0,8).map(l => `• ${l}`)].filter(Boolean).join("\n")
-        case "tasks":
-            return cleaned
-                .map(l => l.match(/(todo|task|action|next)/i) ? `- [ ] ${l}` : `- [ ] ${l}`)
-                .filter(Boolean)
-                .slice(0,10)
-                .join("\n") || "No tasks detected."
-        default:
-            return body
-    }
-}
-
-export default function AgentInterface(){
+export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: propHasApiKey = false }: { apiKey?: string, hasApiKey?: boolean } = {}){
     const note = useSelectedNoteData()
     const [command, setCommand] = React.useState("")
     const [runs, setRuns] = React.useState<Run[]>([])
     const [copiedId, setCopiedId] = React.useState<string | null>(null)
+    const [hasApiKey, setHasApiKey] = React.useState<boolean>(propHasApiKey)
+    const actualApiKey = propApiKey || getApiKey()
 
-    const enqueue = (cmd: string, kind?: string) => {
+    // Interactive prompt suggestions - clickable AI requests (general queries, no notes needed) - Best 3
+    const promptSuggestions = [
+        { icon: Sunrise, text: "Morning boost", prompt: "Give me a motivational quote to start my day", isGeneral: true },
+        { icon: Zap, text: "Productivity hack", prompt: "Share a quick productivity tip I can use today", isGeneral: true },
+        { icon: BookOpen, text: "Quote of the day", prompt: "Give me an inspiring quote of the day", isGeneral: true },
+    ]
+
+    // Quick actions for knowledge base queries (needs notes) - Best 3
+    const quickActions = [
+        { icon: RefreshCw, text: "Catch me up", prompt: "Give me a brief summary of all my notes and tasks to catch me up on what I've been working on", isGeneral: false },
+        { icon: CheckSquare, text: "Find action items", prompt: "Scan through all my notes and pull out a checklist of to-dos, action items, and next steps that I need to complete", isGeneral: false },
+        { icon: BarChart3, text: "What's important?", prompt: "Review all my notes and tell me what are the most important topics, deadlines, or action items I should focus on", isGeneral: false },
+    ]
+
+    // Sync API key from props
+    React.useEffect(() => {
+        setHasApiKey(propHasApiKey)
+    }, [propHasApiKey])
+
+    const enqueue = async (cmd: string) => {
+        // Use API key from props or get from storage
+        const apiKey = actualApiKey || getApiKey()
+        if (!apiKey) {
+            setHasApiKey(false)
+            return
+        }
+
         const id = String(Date.now())
         const createdAt = new Date().toISOString()
         const next: Run = { id, command: cmd, status: "running", createdAt, output: "" }
         setRuns(prev => [next, ...prev])
-        setTimeout(() => {
-            const output = formatOutput(kind || inferKind(cmd), note?.content || "", note?.title || "")
-            setRuns(prev => prev.map(r => r.id === id ? { ...r, status: "success", output } : r))
-        }, 800)
-    }
 
-    const inferKind = (cmd: string) => {
-        const c = cmd.toLowerCase()
-        if (c.includes("bullet")) return "bullets"
-        if (c.includes("task") || c.includes("todo")) return "tasks"
-        return "summarize"
+        // Determine if this is a general query (doesn't need notes) or knowledge base query
+        const isGeneralQuery = !cmd.toLowerCase().includes("my notes") && 
+                               !cmd.toLowerCase().includes("my folders") &&
+                               !cmd.toLowerCase().includes("in my notes") &&
+                               !cmd.toLowerCase().includes("from my notes") &&
+                               !cmd.toLowerCase().includes("summarize") &&
+                               !cmd.toLowerCase().includes("find") &&
+                               !cmd.toLowerCase().includes("analyze") &&
+                               (cmd.toLowerCase().includes("quote") ||
+                                cmd.toLowerCase().includes("motivation") ||
+                                cmd.toLowerCase().includes("wisdom") ||
+                                cmd.toLowerCase().includes("productivity tip") ||
+                                cmd.toLowerCase().includes("creative") ||
+                                cmd.toLowerCase().includes("learning insight") ||
+                                cmd.toLowerCase().includes("tip"))
+
+        // Get notes and folders from localStorage (only for knowledge base queries)
+        const notes = isGeneralQuery ? [] : getNotes()
+        const folders = isGeneralQuery ? [] : getFolders()
+
+        // Use higher temperature for general queries (more creative/varied) vs knowledge base queries (more deterministic)
+        const config = isGeneralQuery 
+            ? { temperature: 0.9, maxTokens: 4000 } // Higher temperature for varied, creative responses
+            : DEFAULT_CONFIG // Lower temperature for accurate knowledge base queries
+
+        // Create WebSocket connection
+        try {
+            const ws = new WebSocket(WS_URL)
+
+            ws.onopen = () => {
+                // Send query message
+                const message = {
+                    message: cmd,
+                    apiKey: apiKey,
+                    model: DEFAULT_MODEL,
+                    config: config,
+                    operationType: "query" as const,
+                    notes: isGeneralQuery ? "" : JSON.stringify(notes),
+                    folders: isGeneralQuery ? "" : JSON.stringify(folders)
+                }
+                ws.send(JSON.stringify(message))
+            }
+
+            ws.onmessage = (event) => {
+                try {
+                    const response = JSON.parse(event.data.toString())
+                    
+                    if (response.success && response.type === "query") {
+                        // Success - update run with response
+                        setRuns(prev => prev.map(r => r.id === id ? { 
+                            ...r, 
+                            status: "success", 
+                            output: response.response || "No response received" 
+                        } : r))
+                    } else if (response.error) {
+                        // Error - update run with error
+                        setRuns(prev => prev.map(r => r.id === id ? { 
+                            ...r, 
+                            status: "error", 
+                            output: `Error: ${response.error}` 
+                        } : r))
+                        if (response.error.includes("API key") || response.error.includes("apiKey")) {
+                            setHasApiKey(false)
+                        }
+                    } else {
+                        // Unknown response format
+                        setRuns(prev => prev.map(r => r.id === id ? { 
+                            ...r, 
+                            status: "error", 
+                            output: `Unexpected response format: ${JSON.stringify(response)}` 
+                        } : r))
+                    }
+                } catch (error) {
+                    setRuns(prev => prev.map(r => r.id === id ? { 
+                        ...r, 
+                        status: "error", 
+                        output: `Failed to parse response: ${error instanceof Error ? error.message : String(error)}` 
+                    } : r))
+                }
+                ws.close()
+            }
+
+            ws.onerror = (error) => {
+                setRuns(prev => prev.map(r => r.id === id ? { 
+                    ...r, 
+                    status: "error", 
+                    output: `WebSocket error: Could not connect to server at ${WS_URL}. Make sure the WebSocket server is running.` 
+                } : r))
+                ws.close()
+            }
+
+            ws.onclose = () => {
+                // Connection closed
+            }
+
+            // Timeout after 60 seconds
+            setTimeout(() => {
+                if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                    ws.close()
+                    setRuns(prev => prev.map(r => r.id === id ? { 
+                        ...r, 
+                        status: "error", 
+                        output: "Request timeout: No response received within 60 seconds." 
+                    } : r))
+                }
+            }, 60000)
+
+        } catch (error) {
+            setRuns(prev => prev.map(r => r.id === id ? { 
+                ...r, 
+                status: "error", 
+                output: `Failed to create WebSocket connection: ${error instanceof Error ? error.message : String(error)}` 
+            } : r))
+        }
     }
 
     const onSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         if (!command.trim()) return
+        if (!hasApiKey) {
+            setRuns(prev => [{
+                id: String(Date.now()),
+                command: command.trim(),
+                status: "error",
+                createdAt: new Date().toISOString(),
+                output: "Error: API key not configured. Please set your Gemini API key in localStorage with key 'gemini_api_key' or set NEXT_PUBLIC_GEMINI_API_KEY environment variable.\n\nTo set it, open browser console and run:\nlocalStorage.setItem('gemini_api_key', 'YOUR_API_KEY_HERE')"
+            }, ...prev])
+            return
+        }
         enqueue(command.trim())
         setCommand("")
     }
@@ -82,68 +220,119 @@ export default function AgentInterface(){
 
     return (
         <div className="h-full w-full flex flex-col bg-background dark:bg-[#282c34] overflow-hidden border-l border-border/50 dark:border-[#4a5568]">
-            {/* Header */}
-            <div className="flex items-center justify-between px-3 md:px-5 py-2.5 md:py-3.5 border-b border-border/50 dark:border-[#4a5568] dark:bg-[#2c313c]">
-                <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
-                    <div className="relative flex-shrink-0">
-                        <div className="relative inline-flex h-8 w-8 md:h-9 md:w-9 items-center justify-center rounded-lg dark:bg-[#3e4451] border dark:border-[#4a5568]">
-                            <Bot className="h-4 w-4 md:h-4.5 md:w-4.5 text-primary dark:text-[#4fc3f7]" />
+                {/* Command Input Section */}
+                <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b border-border/50 dark:border-[#4a5568] dark:bg-[#282c34]">
+                    <form onSubmit={onSubmit} className="space-y-2 md:space-y-3">
+                        <div className="relative group">
+                            <div className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 text-primary/70 dark:text-[#4fc3f7]/70 group-focus-within:text-primary dark:group-focus-within:text-[#4fc3f7] transition-colors z-10">
+                                <Command className="h-3.5 w-3.5 md:h-4 md:w-4" />
+                            </div>
+                            <input
+                                value={command}
+                                onChange={(e)=>setCommand(e.target.value)}
+                                placeholder={hasApiKey ? "Ask anything or use quick actions..." : "Set API key below to use AI"}
+                                disabled={!hasApiKey}
+                                className="w-full pl-9 md:pl-10 pr-16 md:pr-20 py-1.5 md:py-2 rounded-lg border border-border/60 dark:border-[#4a5568] bg-input dark:bg-[#3e4451] text-xs md:text-sm placeholder:text-muted-foreground/60 dark:placeholder:text-[#828997] dark:text-[#d4d4d4] focus:outline-none focus:ring-2 focus:ring-primary/30 dark:focus:ring-[#4fc3f7]/40 focus:border-primary/50 dark:focus:border-[#4fc3f7] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            />
+                            <button 
+                                type="submit" 
+                                disabled={!command.trim() || !hasApiKey}
+                                className="absolute right-1 md:right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 md:gap-1.5 rounded-md bg-primary text-primary-foreground px-2 md:px-2.5 py-1 md:py-1.5 text-[10px] md:text-[11px] font-medium transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-primary shadow-sm"
+                            >
+                                <Play className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                                <span className="hidden sm:inline">Run</span>
+                            </button>
                         </div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <h2 className="font-semibold text-sm md:text-[15px] leading-tight tracking-tight text-foreground dark:text-[#d4d4d4]">AI Agent</h2>
-                        <p className="text-[10px] md:text-[11px] text-muted-foreground/80 dark:text-[#9cdcfe] mt-0.5 leading-tight truncate">
-                            {note ? (note.title || "Untitled") : "No note selected"}
-                        </p>
-                    </div>
-                </div>
-                {runs.length > 0 && (
-                    <button
-                        type="button"
-                        onClick={() => setRuns([])}
-                        className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-background/80 dark:bg-[#3e4451] px-2 md:px-2.5 py-1 md:py-1.5 text-[10px] md:text-[11px] font-medium transition-all hover:bg-muted/80 dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4a5568] active:scale-95 flex-shrink-0 dark:text-[#9cdcfe] dark:hover:text-[#f48771]"
-                        title="Clear history"
-                    >
-                        <Trash2 className="h-3 w-3" />
-                        <span className="hidden sm:inline">Clear</span>
-                    </button>
-                )}
-            </div>
-
-            {/* Command Input Section */}
-            <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b border-border/50 dark:border-[#4a5568] dark:bg-[#282c34]">
-                <form onSubmit={onSubmit} className="space-y-2 md:space-y-3">
-                    <div className="relative group">
-                        <div className="absolute left-2.5 md:left-3 top-1/2 -translate-y-1/2 text-primary/70 dark:text-[#4fc3f7]/70 group-focus-within:text-primary dark:group-focus-within:text-[#4fc3f7] transition-colors z-10">
-                            <Command className="h-3.5 w-3.5 md:h-4 md:w-4" />
-                        </div>
-                        <input
-                            value={command}
-                            onChange={(e)=>setCommand(e.target.value)}
-                            placeholder="Ask anything or use quick actions..."
-                            className="w-full pl-9 md:pl-10 pr-16 md:pr-20 py-1.5 md:py-2 rounded-lg border border-border/60 dark:border-[#4a5568] bg-input dark:bg-[#3e4451] text-xs md:text-sm placeholder:text-muted-foreground/60 dark:placeholder:text-[#828997] dark:text-[#d4d4d4] focus:outline-none focus:ring-2 focus:ring-primary/30 dark:focus:ring-[#4fc3f7]/40 focus:border-primary/50 dark:focus:border-[#4fc3f7] transition-all"
-                        />
-                        <button 
-                            type="submit" 
-                            disabled={!command.trim()}
-                            className="absolute right-1 md:right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-1 md:gap-1.5 rounded-md bg-primary text-primary-foreground px-2 md:px-2.5 py-1 md:py-1.5 text-[10px] md:text-[11px] font-medium transition-all hover:bg-primary/90 active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-primary shadow-sm"
-                        >
-                            <Play className="h-2.5 w-2.5 md:h-3 md:w-3" />
-                            <span className="hidden sm:inline">Run</span>
-                        </button>
-                    </div>
                     
-                    <div className="flex flex-wrap items-center gap-1 md:gap-1.5">
-                        <span className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe] font-medium mr-0.5">Quick:</span>
-                        <QuickAction icon={Sparkles} label="Summarize" onClick={()=>enqueue("Summarize note", "summarize")} />
-                        <QuickAction icon={Wand2} label="Bullets" onClick={()=>enqueue("Make bullets", "bullets")} />
-                        <QuickAction icon={ListTodo} label="Tasks" onClick={()=>enqueue("Extract tasks", "tasks")} />
-                    </div>
+                    {/* Quick Actions & Prompts Section */}
+                    {hasApiKey && (
+                        <div className="flex flex-col gap-2.5">
+                            {/* General Prompts - Inspiration & Daily Boost */}
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                    <SparklesIcon className="h-3 w-3 text-muted-foreground/70 dark:text-[#9cdcfe]" />
+                                    <span className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe] font-medium">Daily Boost</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1 md:gap-1.5">
+                                    {promptSuggestions.map((suggestion, idx) => {
+                                        const Icon = suggestion.icon
+                                        return (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => {
+                                                    enqueue(suggestion.prompt)
+                                                }}
+                                                className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/50 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4fc3f7] active:scale-95 dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]"
+                                                title={suggestion.prompt}
+                                            >
+                                                <Icon className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                                                <span>{suggestion.text}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                            
+                            {/* Knowledge Base Quick Actions - Your Notes */}
+                            <div className="flex flex-col gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                    <BookOpenIcon className="h-3 w-3 text-muted-foreground/70 dark:text-[#9cdcfe]" />
+                                    <span className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe] font-medium">Your Notes</span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-1 md:gap-1.5">
+                                    {quickActions.map((action, idx) => {
+                                        const Icon = action.icon
+                                        return (
+                                            <button
+                                                key={idx}
+                                                type="button"
+                                                onClick={() => {
+                                                    enqueue(action.prompt)
+                                                }}
+                                                className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/50 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4fc3f7] active:scale-95 dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]"
+                                                title={action.prompt}
+                                            >
+                                                <Icon className="h-2.5 w-2.5 md:h-3 md:w-3" />
+                                                <span>{action.text}</span>
+                                            </button>
+                                        )
+                                    })}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    {!hasApiKey && (
+                        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/30 dark:bg-[#3e4451]/50">
+                            <KeyRound className="h-3.5 w-3.5 text-muted-foreground/70 dark:text-[#9cdcfe] shrink-0" />
+                            <p className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe]">
+                                Set your API key in the header to unlock AI-powered insights
+                            </p>
+                        </div>
+                    )}
                 </form>
             </div>
 
             {/* Results Section - Scrollable */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-5 py-3 md:py-4 space-y-2 md:space-y-3 [scrollbar-width:thin] [scrollbar-color:oklch(var(--muted))_transparent] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-muted [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-2 [&::-webkit-scrollbar-thumb]:border-transparent">
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                {/* Results Header with Clear Button */}
+                {runs.length > 0 && (
+                    <div className="flex items-center justify-between px-3 md:px-5 py-2 border-b border-border/40 dark:border-[#4a5568]/50">
+                        <span className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe] font-medium">
+                            {runs.length} {runs.length === 1 ? 'conversation' : 'conversations'}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setRuns([])}
+                            className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/30 dark:bg-[#3e4451]/50 hover:bg-secondary/50 dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#f48771]/50 active:scale-95 transition-all group px-1.5 md:px-2 py-0.5 md:py-1"
+                            title="Clear history"
+                        >
+                            <Trash2 className="h-3 w-3 md:h-3.5 md:w-3.5 text-muted-foreground/70 dark:text-[#9cdcfe] group-hover:text-foreground dark:group-hover:text-[#f48771] transition-colors" />
+                            <span className="text-[10px] md:text-[11px] font-medium text-muted-foreground/70 dark:text-[#9cdcfe] group-hover:text-foreground dark:group-hover:text-[#f48771] transition-colors hidden sm:inline">Clear</span>
+                        </button>
+                    </div>
+                )}
+                <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-5 py-3 md:py-4 space-y-2 md:space-y-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
                 {runs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center py-16 px-4">
                         <div className="relative mb-5">
@@ -165,20 +354,9 @@ export default function AgentInterface(){
                         copied={copiedId === run.id}
                     />
                 ))}
+                </div>
             </div>
         </div>
-    )
-}
-
-function QuickAction({ icon: Icon, label, onClick }: { icon: any, label: string, onClick: () => void }){
-    return (
-        <button 
-            onClick={onClick} 
-            className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/50 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4fc3f7] active:scale-95 dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]"
-        >
-            <Icon className="h-2.5 w-2.5 md:h-3 md:w-3" />
-            {label}
-        </button>
     )
 }
 
@@ -193,15 +371,21 @@ function RunCard({ run, onCopy, copied }: { run: Run, onCopy: () => void, copied
                     </div>
                     {run.status === "success" && (
                         <span className="inline-flex items-center gap-1 md:gap-1.5 text-[10px] md:text-[11px] whitespace-nowrap">
-                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-[#a5d6a7] flex-shrink-0" />
+                            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-[#a5d6a7] shrink-0" />
                             <span className="font-medium text-emerald-600 dark:text-[#a5d6a7] hidden sm:inline">Done</span>
                         </span>
                     )}
+                    {run.status === "error" && (
+                        <span className="inline-flex items-center gap-1 md:gap-1.5 text-[10px] md:text-[11px] whitespace-nowrap">
+                            <div className="h-1.5 w-1.5 rounded-full bg-red-500 dark:bg-red-400 shrink-0" />
+                            <span className="font-medium text-red-600 dark:text-red-400 hidden sm:inline">Error</span>
+                        </span>
+                    )}
                 </div>
-                {run.status === "success" && (
+                {(run.status === "success" || run.status === "error") && (
                     <button 
                         onClick={onCopy}
-                        className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/30 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] active:scale-95 flex-shrink-0"
+                        className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/30 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] active:scale-95 shrink-0"
                     >
                         {copied ? (
                             <>
@@ -226,6 +410,12 @@ function RunCard({ run, onCopy, copied }: { run: Run, onCopy: () => void, copied
                         <div className="relative flex items-center justify-center h-full">
                             <div className="absolute inset-0 bg-[#4fc3f7]/20 blur-xl rounded-full animate-pulse"></div>
                         </div>
+                    </div>
+                ) : run.status === "error" ? (
+                    <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <pre className="whitespace-pre-wrap font-sans text-[10px] md:text-xs leading-relaxed text-red-600 dark:text-red-400 bg-transparent p-0 m-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                            {run.output}
+                        </pre>
                     </div>
                 ) : (
                     <div className="prose prose-sm dark:prose-invert max-w-none">

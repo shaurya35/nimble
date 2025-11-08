@@ -169,7 +169,7 @@ export function NavMain({
     <SidebarGroup>
       <SidebarGroupLabel>
         <p className="dark:text-[#d4d4d4]">Folders</p>
-        <button type="button" className="cursor-pointer dark:text-[#a5d6a7] dark:hover:text-[#a5d6a7]" onClick={onStartAdd}>
+        <button type="button" className="cursor-pointer text-muted-foreground hover:text-foreground dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7] transition-colors" onClick={onStartAdd}>
           <Plus size={14} />
         </button>
       </SidebarGroupLabel>

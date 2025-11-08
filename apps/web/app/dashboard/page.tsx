@@ -6,12 +6,20 @@ import NotesInterface from "@/components/notes/NotesInterface"
 import { SelectedNoteProvider } from "@/components/notes/selected-note-context"
 import BreadcrumbNote from "@/components/notes/BreadcrumbNote"
 import { Separator } from "@/components/ui/separator"
-import { Command, GripVertical, GripHorizontal } from "lucide-react"
+import { Command, GripVertical, GripHorizontal, Pencil, Key, Eye, EyeOff, X, Check } from "lucide-react"
 import {
   SidebarInset,
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+
+// API Key management functions
+const getApiKey = (): string => {
+  if (typeof window === "undefined") return ""
+  const stored = localStorage.getItem("gemini_api_key")
+  if (stored) return stored
+  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
+}
 
 export default function Page() {
   const [mounted, setMounted] = React.useState(false)
@@ -21,6 +29,62 @@ export default function Page() {
   const [isResizing, setIsResizing] = React.useState(false)
   const [isResizingMobile, setIsResizingMobile] = React.useState(false)
   const [isDesktop, setIsDesktop] = React.useState(false)
+  
+  // API Key state
+  const [hasApiKey, setHasApiKey] = React.useState<boolean>(false)
+  const [apiKey, setApiKey] = React.useState<string>("")
+  const [showApiKey, setShowApiKey] = React.useState<boolean>(false)
+  const [showApiKeyInput, setShowApiKeyInput] = React.useState<boolean>(false)
+  const [actualApiKey, setActualApiKey] = React.useState<string>("")
+
+  // Check for API key on mount
+  React.useEffect(() => {
+    const checkApiKey = () => {
+      const key = getApiKey()
+      setHasApiKey(!!key)
+      if (key) {
+        setActualApiKey(key)
+        const masked = key.substring(0, 4) + "•".repeat(Math.max(0, key.length - 8)) + key.substring(key.length - 4)
+        setApiKey(masked)
+      } else {
+        setApiKey("")
+        setActualApiKey("")
+      }
+    }
+    checkApiKey()
+  }, [])
+
+  // Save API key to localStorage
+  const handleApiKeyChange = (value: string) => {
+    setActualApiKey(value)
+    if (value.trim()) {
+      localStorage.setItem("gemini_api_key", value.trim())
+      setHasApiKey(true)
+      if (!showApiKey) {
+        const masked = value.substring(0, 4) + "•".repeat(Math.max(0, value.length - 8)) + value.substring(value.length - 4)
+        setApiKey(masked)
+      } else {
+        setApiKey(value)
+      }
+    } else {
+      localStorage.removeItem("gemini_api_key")
+      setHasApiKey(false)
+      setApiKey("")
+    }
+  }
+
+  // Toggle show/hide API key
+  const toggleShowApiKey = () => {
+    setShowApiKey(!showApiKey)
+    if (!showApiKey) {
+      setApiKey(actualApiKey)
+    } else {
+      if (actualApiKey) {
+        const masked = actualApiKey.substring(0, 4) + "•".repeat(Math.max(0, actualApiKey.length - 8)) + actualApiKey.substring(actualApiKey.length - 4)
+        setApiKey(masked)
+      }
+    }
+  }
 
   React.useEffect(() => {
     try {
@@ -206,6 +270,64 @@ export default function Page() {
               <Command className="h-3.5 w-3.5 dark:text-[#4fc3f7]" />
               <span>AI Agent</span>
             </div>
+            
+            {/* API Key Management - Creative Design */}
+            {!showApiKeyInput ? (
+              <button
+                type="button"
+                onClick={() => setShowApiKeyInput(true)}
+                className="inline-flex items-center gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/30 dark:bg-[#3e4451]/50 hover:bg-secondary/50 dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4fc3f7]/50 transition-all active:scale-95 group px-2 py-1.5"
+                title={hasApiKey ? "Edit API Key" : "Set API Key"}
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground/70 dark:text-[#9cdcfe] group-hover:text-foreground dark:group-hover:text-[#4fc3f7] transition-colors" />
+                <span className="text-[11px] font-medium text-muted-foreground dark:text-[#9cdcfe] group-hover:text-foreground dark:group-hover:text-[#4fc3f7] transition-colors">API Key</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <div className="relative">
+                  <div className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/50 dark:text-[#828997] z-10">
+                    <Key className="h-3.5 w-3.5" />
+                  </div>
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={apiKey}
+                    onChange={(e) => handleApiKeyChange(e.target.value)}
+                    placeholder="Enter Gemini API key"
+                    autoFocus
+                    className="pl-9 pr-20 py-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-input dark:bg-[#3e4451] text-[11px] placeholder:text-muted-foreground/60 dark:placeholder:text-[#828997] dark:text-[#d4d4d4] focus:outline-none focus:ring-2 focus:ring-primary/30 dark:focus:ring-[#4fc3f7]/40 focus:border-primary/50 dark:focus:border-[#4fc3f7] transition-all w-[200px]"
+                  />
+                  <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={toggleShowApiKey}
+                      className="text-muted-foreground/60 dark:text-[#828997] hover:text-foreground dark:hover:text-[#4fc3f7] transition-colors p-0.5 rounded hover:bg-muted/30 dark:hover:bg-[#4a5568]/30"
+                      title={showApiKey ? "Hide key" : "Show key"}
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowApiKeyInput(false)
+                        if (showApiKey && actualApiKey) {
+                          const masked = actualApiKey.substring(0, 4) + "•".repeat(Math.max(0, actualApiKey.length - 8)) + actualApiKey.substring(actualApiKey.length - 4)
+                          setApiKey(masked)
+                          setShowApiKey(false)
+                        }
+                      }}
+                      className="text-muted-foreground/60 dark:text-[#828997] hover:text-foreground dark:hover:text-red-500 transition-colors p-0.5 rounded hover:bg-muted/30 dark:hover:bg-[#4a5568]/30"
+                      title="Close"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </header>
         <div className="flex flex-1 flex-col md:flex-row p-2 md:p-4 pt-0 md:min-h-0 md:overflow-hidden overflow-hidden">
@@ -247,7 +369,7 @@ export default function Page() {
               height: isDesktop ? 'auto' : `${100 - notepadHeight}%`
             }}
           >
-            <AgentInterface/>
+            <AgentInterface apiKey={actualApiKey} hasApiKey={hasApiKey} />
           </div>
         </div>
         </SidebarInset>

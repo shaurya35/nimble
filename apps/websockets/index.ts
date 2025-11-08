@@ -1,5 +1,5 @@
 import { WebSocketServer } from "ws";
-import { convertor } from "./functions";
+import { convertor, queryAgent } from "./functions";
 
 interface Message {
     message: string;
@@ -7,17 +7,22 @@ interface Message {
     model: string;
     config: object;
     existingTodos?: string;
+    notes?: string;
+    folders?: string;
+    operationType?: "todo" | "query";
 }
 
 interface Response {
     success: boolean;
+    type?: "todo" | "query";
     command?: string;
     operation?: {
         type: string;
         todoId?: string;
         data?: object;
         localStorageCommand?: string;
-    }
+    };
+    response?: string;
     error?: string;
     todos?: any[];
 }
@@ -41,7 +46,7 @@ wss.on("connection", (ws, req) => {
                     JSON.stringify({
                       success: false,
                       error:
-                        "Invalid JSON format. Expected: {message, apiKey, model, config, existingTodos?}",
+                        "Invalid JSON format. Expected: {message, apiKey, model, config, existingTodos?, notes?, folders?, operationType?}",
                     } as Response)
                   );
                 return;
@@ -61,61 +66,110 @@ wss.on("connection", (ws, req) => {
             const model = data.model;
             const config = data.config;
             const todos = data.existingTodos || "";
+            const notes = data.notes || "";
+            const folders = data.folders || "";
+            const operationType = data.operationType;
 
-            const res = await convertor(data.message, apiKey, model, config, todos);
+            // Determine operation type
+            const isTodoOperation = operationType === "todo" || (
+                operationType !== "query" && 
+                todos && 
+                (data.message.toLowerCase().includes("todo") || 
+                 data.message.toLowerCase().includes("task") ||
+                 data.message.toLowerCase().includes("add") ||
+                 data.message.toLowerCase().includes("create") ||
+                 data.message.toLowerCase().includes("delete") ||
+                 data.message.toLowerCase().includes("remove") ||
+                 data.message.toLowerCase().includes("update") ||
+                 data.message.toLowerCase().includes("mark") ||
+                 data.message.toLowerCase().includes("complete") ||
+                 data.message.toLowerCase().includes("list") ||
+                 data.message.toLowerCase().includes("show"))
+            );
 
-            let operation: any;
-            try {
-                const clean = res
-                        .replace(/```json\n?/g, "")
-                        .replace(/```\n?/g, "")
-                        .trim();
+            let response: Response;
 
-                operation = JSON.parse(clean);
-            }catch(error){
-                console.error(`Failed to parse AI Response ${res}`);
-                ws.send(
-                    JSON.stringify({
-                      success: false,
-                      error: `Failed to parse AI response: ${error}`,
-                      rawResponse: error,
-                    } as Response)
-                );
-                return;
-            };
+            if (isTodoOperation) {
+                // Handle todo operations
+                const res = await convertor(data.message, apiKey, model, config, todos);
 
-            if(!operation.type || !operation.localStorageCommand){
-                ws.send(
-                    JSON.stringify({
-                      success: false,
-                      error: "Invalid operation structure from AI",
-                      operation,
-                    } as Response)
-                  );
-                  return;
-            }
+                let operation: any;
+                try {
+                    const clean = res
+                            .replace(/```json\n?/g, "")
+                            .replace(/```\n?/g, "")
+                            .trim();
 
-            const response: Response = {
-                success: true,
-                command: operation.localStorageCommand,
-                operation: {
-                  type: operation.type,
-                  todoId: operation.todoId,
-                  data: operation.data,
-                  localStorageCommand: operation.localStorageCommand,
-                },
-            };
+                    operation = JSON.parse(clean);
+                }catch(error){
+                    console.error(`Failed to parse AI Response ${res}`);
+                    ws.send(
+                        JSON.stringify({
+                          success: false,
+                          error: `Failed to parse AI response: ${error}`,
+                          rawResponse: error,
+                        } as Response)
+                    );
+                    return;
+                };
 
-            if(operation.type === "list" && todos){
-                try{
-                    response.todos = JSON.parse(todos);
-                }catch{
+                if(!operation.type || !operation.localStorageCommand){
+                    ws.send(
+                        JSON.stringify({
+                          success: false,
+                          error: "Invalid operation structure from AI",
+                          operation,
+                        } as Response)
+                      );
+                      return;
+                }
 
+                response = {
+                    success: true,
+                    type: "todo",
+                    command: operation.localStorageCommand,
+                    operation: {
+                      type: operation.type,
+                      todoId: operation.todoId,
+                      data: operation.data,
+                      localStorageCommand: operation.localStorageCommand,
+                    },
+                };
+
+                if(operation.type === "list" && todos){
+                    try{
+                        response.todos = JSON.parse(todos);
+                    }catch{
+
+                    }
+                }
+
+                ws.send(JSON.stringify(response));
+                console.log(`Response Sent- Client ${operation.type} (todo operation)`);
+            } else {
+                // Handle AI query operations
+                try {
+                    const res = await queryAgent(data.message, apiKey, model, config, notes, folders);
+                    
+                    response = {
+                        success: true,
+                        type: "query",
+                        response: res,
+                    };
+
+                    ws.send(JSON.stringify(response));
+                    console.log(`Response Sent- Client (query operation)`);
+                } catch (error) {
+                    console.error("Error in queryAgent:", error);
+                    ws.send(
+                        JSON.stringify({
+                            success: false,
+                            type: "query",
+                            error: error instanceof Error ? error.message : "Unknown error occurred in query",
+                        } as Response)
+                    );
                 }
             }
-
-            ws.send(JSON.stringify(response));
-            console.log(`Response Sent- Client ${operation.type}`);
         }catch(error){
             console.error("Error processing message:", error);
             ws.send(

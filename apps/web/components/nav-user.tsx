@@ -98,14 +98,14 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
+            {/* <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem className="dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]">
                 <Sparkles className="size-4 dark:text-[#9cdcfe]" />
                 Upgrade to Pro
               </DropdownMenuItem>
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            <DropdownMenuSeparator /> */}
             <DropdownMenuGroup>
               <DropdownMenuItem
                 onSelect={(e) => { e.preventDefault(); toggleTheme() }}
@@ -119,7 +119,7 @@ export function NavUser({
                   <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-background dark:bg-[#1a1a1a] shadow transition-transform ${isDark ? 'translate-x-4' : ''}`}></div>
                 </div>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              {/* <DropdownMenuItem>
                 <BadgeCheck />
                 Account
               </DropdownMenuItem>
@@ -130,13 +130,13 @@ export function NavUser({
               <DropdownMenuItem>
                 <Bell />
                 Notifications
-              </DropdownMenuItem>
+              </DropdownMenuItem> */}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
+            {/* <DropdownMenuSeparator />
             <DropdownMenuItem>
               <LogOut />
               Log out
-            </DropdownMenuItem>
+            </DropdownMenuItem> */}
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>
