@@ -279,7 +279,7 @@ async function testQuery(queryIndex: number = 0) {
     
     const message = {
       message: test.message,
-      apiKey: "AIzaSyART-oV2RKkQ6xgYVUMLWBrLq88M3CcAEw", // Replace with actual API key
+      apiKey: "", // Replace with actual API key
       model: "gemini-1.5-flash", // Best balance: good extraction + low cost (~$0.50-1.00 per 1M input tokens)
       config: {
         temperature: 0.3, // Lower temperature for more focused, deterministic extraction
