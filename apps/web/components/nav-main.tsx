@@ -23,6 +23,7 @@ import {
 export function NavMain({
   items,
   onSelectNote,
+  selectedNoteId,
   onAddNote,
   onDeleteFolder,
   onStartEditFolder,
@@ -64,6 +65,7 @@ export function NavMain({
     }[];
   }[];
   onSelectNote?: (noteId: string) => void;
+  selectedNoteId?: string | null;
   onAddNote?: (folderId: string | null) => void;
   onDeleteFolder?: (folderId: string) => void;
   onStartEditFolder?: (folderId: string) => void;
@@ -166,20 +168,20 @@ export function NavMain({
   return (
     <SidebarGroup>
       <SidebarGroupLabel>
-        <p>Folders</p>
-        <button type="button" className="cursor-pointer" onClick={onStartAdd}>
+        <p className="dark:text-[#d4d4d4]">Folders</p>
+        <button type="button" className="cursor-pointer dark:text-[#a5d6a7] dark:hover:text-[#a5d6a7]" onClick={onStartAdd}>
           <Plus size={14} />
         </button>
       </SidebarGroupLabel>
       <SidebarMenu className="overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {items.length === 0 && !addMode && state === "expanded" ? (
           <div className="px-2 py-6 flex flex-col items-center justify-center text-center space-y-1.5">
-            <div className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-muted/30">
-              <FolderPlus className="h-5 w-5 text-muted-foreground" />
+            <div className="inline-flex h-10 w-10 items-center justify-center rounded-md bg-muted/30 dark:bg-[#3e4451]">
+              <FolderPlus className="h-5 w-5 text-muted-foreground dark:text-[#4fc3f7]" />
             </div>
             <div className="space-y-0.5">
-              <p className="text-xs font-medium">No folders yet</p>
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium dark:text-[#d4d4d4]">No folders yet</p>
+              <p className="text-xs text-muted-foreground dark:text-[#9cdcfe]">
                 Start by creating your first folder
               </p>
             </div>
@@ -222,7 +224,7 @@ export function NavMain({
                     title="Change icon"
                     aria-label="Change icon"
                   >
-                    {item.icon && <item.icon />}
+                  {item.icon && <item.icon className="dark:text-[#4fc3f7]" />}
                   </span>
                   {editingFolderId === (item as any).id ? (
                     <input
@@ -234,11 +236,11 @@ export function NavMain({
                         if (e.key === 'Escape') onCancelEditFolder?.();
                       }}
                       onBlur={() => onCancelEditFolder?.()}
-                      className="ml-2 flex-1 bg-transparent outline-none border-b border-primary"
+                      className="ml-2 flex-1 bg-transparent outline-none border-b border-primary dark:border-[#4fc3f7] dark:text-[#d4d4d4]"
                       onClick={(e) => e.stopPropagation()}
                     />
                   ) : (
-                    <span className="ml-2 block overflow-hidden text-ellipsis whitespace-nowrap transition-all group-hover/item:max-w-[calc(100%-5rem)] max-w-full">{item.title}</span>
+                    <span className="ml-2 block overflow-hidden text-ellipsis whitespace-nowrap transition-all group-hover/item:max-w-[calc(100%-5rem)] max-w-full dark:text-[#d4d4d4] dark:group-hover/item:text-[#4fc3f7]">{item.title}</span>
                   )}
                   <div className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden">
                     {typeof (item as any).id !== 'undefined' && (item as any).id !== "" && (
@@ -246,7 +248,7 @@ export function NavMain({
                         <span
                           role="button"
                           tabIndex={0}
-                          className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted"
+                          className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted dark:hover:bg-[#4a5568] dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]"
                           onClick={(e) => {
                             e.stopPropagation();
                             onStartEditFolder?.(String((item as any).id));
@@ -262,7 +264,7 @@ export function NavMain({
                         <span
                           role="button"
                           tabIndex={0}
-                          className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted"
+                          className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted dark:hover:bg-[#4a5568] dark:text-[#9cdcfe] dark:hover:text-[#f48771]"
                           onClick={(e) => {
                             e.stopPropagation();
                             onDeleteFolder?.(String((item as any).id));
@@ -280,7 +282,7 @@ export function NavMain({
                     <span
                       role="button"
                       tabIndex={0}
-                      className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted"
+                      className="pointer-events-auto cursor-pointer p-1 rounded hover:bg-muted dark:hover:bg-[#4a5568] dark:text-[#9cdcfe] dark:hover:text-[#a5d6a7]"
                       onClick={(e) => {
                         e.stopPropagation();
                         const fid = ((item as any).id ?? null) as any;
@@ -300,17 +302,19 @@ export function NavMain({
                       <Plus size={14} />
                     </span>
                   </div>
-                  <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden" />
+                  <ChevronRight className="absolute right-2 top-1/2 -translate-y-1/2 transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90 group-data-[collapsible=icon]:hidden dark:text-[#9cdcfe]" />
                 </SidebarMenuButton>
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <SidebarMenuSub>
-                  {item.items?.map((subItem) => (
+                  {item.items?.map((subItem) => {
+                    const isSelected = selectedNoteId === subItem.id;
+                    return (
                     <SidebarMenuSubItem key={subItem.id ?? subItem.title}>
                       <SidebarMenuSubButton asChild className="cursor-pointer w-full">
                         <button
                           type="button"
-                          className="w-full text-left relative pr-8 group/sub"
+                          className={`w-full text-left relative pr-8 group/sub dark:text-[#d4d4d4] dark:hover:text-[#ce93d8] ${isSelected ? 'dark:bg-[#3e4451]/50 dark:text-[#ce93d8]' : ''}`}
                           onClick={() => onSelectNote?.(subItem.id)}
                         >
                           <span className="block w-full overflow-hidden text-ellipsis whitespace-nowrap">{subItem.title}</span>
@@ -319,7 +323,7 @@ export function NavMain({
                             tabIndex={0}
                             title="Delete note"
                             aria-label="Delete note"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/sub:opacity-100 transition-opacity p-1 rounded hover:bg-muted"
+                            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/sub:opacity-100 transition-opacity p-1 rounded hover:bg-muted dark:hover:bg-[#4a5568] dark:text-[#9cdcfe] dark:hover:text-[#f48771]"
                             onClick={(e) => {
                               e.stopPropagation();
                               onDeleteNote?.(subItem.id);
@@ -333,7 +337,8 @@ export function NavMain({
                         </button>
                       </SidebarMenuSubButton>
                     </SidebarMenuSubItem>
-                  ))}
+                    );
+                  })}
                   {addingNoteForFolderId === (item as any).id && (
                     <SidebarMenuSubItem>
                       <div className="px-2 py-0.5">
@@ -347,7 +352,7 @@ export function NavMain({
                             if (e.key === 'Escape') onCancelAddNote?.();
                           }}
                           placeholder="New note title"
-                          className="w-full bg-transparent outline-none text-sm"
+                          className="w-full bg-transparent outline-none text-sm dark:text-[#d4d4d4] dark:placeholder:text-[#828997]"
                         />
                       </div>
                     </SidebarMenuSubItem>
@@ -370,7 +375,7 @@ export function NavMain({
                   if (e.key === 'Escape') onCancelAdd?.();
                 }}
                 placeholder="New folder name"
-                className="w-full bg-transparent outline-none text-sm"
+                className="w-full bg-transparent outline-none text-sm dark:text-[#d4d4d4] dark:placeholder:text-[#828997]"
               />
             </div>
           </SidebarMenuItem>
@@ -381,13 +386,13 @@ export function NavMain({
       {pickingFolderId && iconOptions && pickingPosition && (
         <>
           <div className="fixed inset-0 z-40" onClick={onCancelPick} />
-          <div className="fixed z-50 grid grid-cols-6 gap-1 rounded-md border bg-background p-2 shadow-md" style={{ left: pickingPosition.x, top: pickingPosition.y }}>
+          <div className="fixed z-50 grid grid-cols-6 gap-1 rounded-md border bg-background dark:bg-[#2c313c] dark:border-[#4a5568] p-2 shadow-md" style={{ left: pickingPosition.x, top: pickingPosition.y }}>
             {iconOptions.map(({ key, Icon }) => (
               <span
                 key={key}
                 role="button"
                 tabIndex={0}
-                className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted cursor-pointer"
+                className="flex h-7 w-7 items-center justify-center rounded hover:bg-muted dark:hover:bg-[#3e4451] cursor-pointer dark:text-[#4fc3f7] dark:hover:text-[#4fc3f7]"
                 title={key}
                 onClick={() => onPickIcon?.(pickingFolderId, key)}
                 onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') onPickIcon?.(pickingFolderId, key); }}

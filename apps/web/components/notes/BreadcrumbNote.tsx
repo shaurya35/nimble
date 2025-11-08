@@ -36,26 +36,26 @@ export default function BreadcrumbNote() {
     return (
         <Breadcrumb>
             <BreadcrumbList>
-                <BreadcrumbItem className="hidden md:flex items-center gap-1 text-muted-foreground">
-                    <FolderIcon size={14} />
-                    <BreadcrumbLink href="#">Notes</BreadcrumbLink>
+                <BreadcrumbItem className="hidden md:flex items-center gap-1 text-muted-foreground dark:text-[#9cdcfe]">
+                    <FolderIcon size={14} className="dark:text-[#9cdcfe]" />
+                    <BreadcrumbLink href="#" className="dark:hover:text-[#4fc3f7]">Notes</BreadcrumbLink>
                 </BreadcrumbItem>
-                <BreadcrumbSeparator className="hidden md:block">
+                <BreadcrumbSeparator className="hidden md:block dark:text-[#4a5568]">
                     <ChevronRight size={12} />
                 </BreadcrumbSeparator>
                 {folderName ? (
                     <BreadcrumbItem className="hidden md:flex items-center gap-1">
-                        <BreadcrumbLink href="#">{folderName}</BreadcrumbLink>
+                        <BreadcrumbLink href="#" className="dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]">{folderName}</BreadcrumbLink>
                     </BreadcrumbItem>
                 ) : null}
                 {folderName ? (
-                    <BreadcrumbSeparator className="hidden md:block">
+                    <BreadcrumbSeparator className="hidden md:block dark:text-[#4a5568]">
                         <ChevronRight size={12} />
                     </BreadcrumbSeparator>
                 ) : null}
                 <BreadcrumbItem className="flex items-center gap-1">
-                    <FileText size={14} />
-                    <BreadcrumbPage>{noteTitle || "Select a note"}</BreadcrumbPage>
+                    <FileText size={14} className="dark:text-[#9cdcfe]" />
+                    <BreadcrumbPage className="dark:text-[#d4d4d4]">{noteTitle || "Select a note"}</BreadcrumbPage>
                 </BreadcrumbItem>
             </BreadcrumbList>
         </Breadcrumb>

@@ -251,12 +251,12 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       const childNotes = notes.filter((n: any) => n.folderId === folder.id);
       return {
         id: String(folder.id),
-        title: folder.name ?? "Untitled",
+      title: folder.name ?? "Untitled",
         icon: getIconForId(String(folder.id), folder.iconKey ?? undefined),
         isActive: childNotes.length > 0,
         items: childNotes.map((note: any) => ({
           id: String(note.id),
-          title: note.title ?? "Untitled",
+        title: note.title ?? "Untitled",
         })),
       };
     });
@@ -414,6 +414,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavMain
           items={navMainItems}
           onSelectNote={(id) => setSelectedNoteId(id)}
+          selectedNoteId={selectedNoteId}
           onDeleteFolder={handleDeleteFolder}
           onStartEditFolder={handleStartEditFolder}
           editingFolderId={editingFolderId}

@@ -34,22 +34,22 @@ export default function NotesInterface(){
 
 	if (!selected) {
 		return (
-			<div className="font-sans h-full flex items-center justify-center p-4 text-sm text-muted-foreground">
+			<div className="font-sans h-full flex items-center justify-center p-4 text-xs md:text-sm text-muted-foreground dark:text-[#9cdcfe] text-center">
 				Select a note from the sidebar to view and edit.
 			</div>
 		);
 	}
 
 	return (
-		<div className="font-sans h-full flex flex-col p-6">
+		<div className="font-sans h-full flex flex-col p-3 md:p-6">
 			<input
-				className="w-full bg-transparent text-2xl font-semibold outline-none placeholder:text-neutral-400 mb-4 flex-shrink-0"
+				className="w-full bg-transparent text-xl md:text-2xl font-semibold outline-none placeholder:text-neutral-400 dark:placeholder:text-[#828997] mb-3 md:mb-4 flex-shrink-0 dark:text-[#d4d4d4]"
 				placeholder="Untitled"
 				value={title}
 				onChange={(e) => setTitle(e.target.value)}
 			/>
 			<textarea
-				className="w-full flex-1 bg-transparent outline-none resize-none text-sm whitespace-pre-wrap overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+				className="w-full flex-1 bg-transparent outline-none resize-none text-xs md:text-sm whitespace-pre-wrap overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden placeholder:text-neutral-400 dark:placeholder:text-[#828997] dark:text-[#d4d4d4]"
 				placeholder="Start writing..."
 				value={content}
 				onChange={(e) => setContent(e.target.value)}

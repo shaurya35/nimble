@@ -74,10 +74,10 @@ export function NavUser({
                 <AvatarFallback className="rounded-lg">CN</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user.name}</span>
-                <span className="truncate text-xs">{user.email}</span>
+                <span className="truncate font-medium dark:text-[#d4d4d4]">{user.name}</span>
+                <span className="truncate text-xs dark:text-[#9cdcfe]">{user.email}</span>
               </div>
-              <ChevronsUpDown className="ml-auto size-4" />
+              <ChevronsUpDown className="ml-auto size-4 dark:text-[#9cdcfe]" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
           <DropdownMenuContent
@@ -93,15 +93,15 @@ export function NavUser({
                   <AvatarFallback className="rounded-lg">CN</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user.name}</span>
-                  <span className="truncate text-xs">{user.email}</span>
+                  <span className="truncate font-medium dark:text-[#d4d4d4]">{user.name}</span>
+                  <span className="truncate text-xs dark:text-[#9cdcfe]">{user.email}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Sparkles />
+              <DropdownMenuItem className="dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]">
+                <Sparkles className="size-4 dark:text-[#9cdcfe]" />
                 Upgrade to Pro
               </DropdownMenuItem>
             </DropdownMenuGroup>
@@ -115,8 +115,8 @@ export function NavUser({
                   {isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
                   Theme
                 </div>
-                <div className={`h-5 w-9 rounded-full ${isDark ? 'bg-primary' : 'bg-muted'} relative transition-colors`}>
-                  <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-background shadow transition-transform ${isDark ? 'translate-x-4' : ''}`}></div>
+                <div className={`h-5 w-9 rounded-full ${isDark ? 'bg-[#4fc3f7]' : 'bg-muted'} relative transition-colors`}>
+                  <div className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-background dark:bg-[#1a1a1a] shadow transition-transform ${isDark ? 'translate-x-4' : ''}`}></div>
                 </div>
               </DropdownMenuItem>
               <DropdownMenuItem>
