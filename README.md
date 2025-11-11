@@ -1,4 +1,4 @@
-![Example Image](server/views/banner.png)
+<!-- ![Example Image](server/views/banner.png) -->
 
 # Nimble- Local-first AI Notetaker
 
@@ -20,12 +20,12 @@ Nimble is a simple, privacy-first note app that keeps your notes on your device 
 
 ## Features
 
-- Local-first storage — Notes live on your device by default; fast read/write and offline editing.
+- Local-first storage-  Notes live on your device by default; fast read/write and offline editing.
 - AI agents (over WebSocket)- Remote AI agents process your local notes via a WebSocket connection and return results in real time.
-- Relevancy search — Ask questions and get results ranked by relevance across your notes.
-- Quote extraction — Automatically extract key quotes or highlights from multiple notes.
-- General query — Ask the AI broad questions about your notes (summaries, follow-ups, TODO extraction, etc.).
-- Privacy-first design — The UI and storage remain local; only the data you send over WebSocket reaches the AI service.
+- Relevancy search- Ask questions and get results ranked by relevance across your notes.
+- Quote extraction- Automatically extract key quotes or highlights from multiple notes.
+- General query- Ask the AI broad questions about your notes (summaries, follow-ups, TODO extraction, etc.).
+- Privacy-first design- The UI and storage remain local; only the data you send over WebSocket reaches the AI service.
 
 ## Dependencies
 
