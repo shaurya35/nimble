@@ -298,6 +298,18 @@ const queryAgent = async (
   folders?: string
 ): Promise<string> => {
   try {
+    // Calculate relative dates from the message
+    const calculatedDate = calculateRelativeDate(message);
+    const dateContext = calculatedDate
+      ? `\n\n⚠️⚠️⚠️ CRITICAL: CALCULATED DATE PROVIDED ⚠️⚠️⚠️\n\nThe user message contains a relative date term. The server has calculated the exact date for you.\n\nYOU MUST USE THIS EXACT DATE STRING (do NOT calculate or modify it):\n"${calculatedDate}"\n\nWhen mentioning dates or times in your response, use this calculated date: "${calculatedDate}"\n\nDO NOT use setDate(), Date.now(), or any date calculation. Just use the string "${calculatedDate}" directly.\n\n`
+      : "";
+
+    // Get current date/time for context
+    const now = new Date();
+    const currentDate = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const currentTime = now.toISOString(); // Full ISO string
+    const currentDateContext = `\n\n📅 CURRENT DATE/TIME CONTEXT:\n- Today's date: ${currentDate}\n- Current timestamp: ${currentTime}\n- Use this as reference when the user asks about "today", "now", or current dates.\n\n`;
+
     // Parse context data
     let notesData: any[] = [];
     let foldersData: any[] = [];
@@ -405,6 +417,18 @@ ${fullContent}
 
     const systemPrompt = `You are an intelligent AI assistant with two primary functions:
 
+## ⚠️ CRITICAL DATE/TIME HANDLING RULES
+
+**IMPORTANT**: The server has calculated dates and provided current date/time context for you. You MUST follow these rules:
+
+1. **If a CALCULATED DATE is provided** (you'll see it marked with ⚠️⚠️⚠️), you MUST use that EXACT date string. Do NOT calculate dates yourself. Do NOT use setDate(), Date.now(), or any date manipulation.
+
+2. **If CURRENT DATE/TIME CONTEXT is provided** (marked with 📅), use it as reference for "today", "now", or current dates. The current date and timestamp are provided for your accuracy.
+
+3. **NEVER guess or invent dates** - Always use the dates provided by the server. If no date is calculated, you can mention dates naturally, but be accurate.
+
+4. **When mentioning dates in responses**, format them clearly (e.g., "February 12, 2025" or "2025-02-12") based on the calculated dates provided.
+
 ## Your Role
 
 ### 1. General AI Assistant (PRIMARY - for general queries):
@@ -416,7 +440,16 @@ When users ask for general content, quotes, tips, motivation, or any non-note-re
 - **Be creative and helpful** - Generate ideas, inspiration, and helpful content
 - **VARY YOUR RESPONSES** - NEVER repeat the same quote, tip, or response. Always provide DIFFERENT content each time, even for similar queries. Use your full knowledge base to provide fresh, varied responses.
 
-**CRITICAL**: For queries like "Give me a motivational quote", "Share productivity tips", "Daily wisdom", "Quote of the day", etc. - you MUST provide the content directly. Do NOT search notes. These are general AI requests, not knowledge base queries. **ALWAYS provide a DIFFERENT quote, tip, or response each time - never repeat previous responses.**
+**CRITICAL VARIETY RULES**:
+1. **NEVER repeat quotes**: If you've used a quote before, choose a completely different one from a different person or source
+2. **Rotate through different authors**: Use quotes from diverse sources - entrepreneurs, philosophers, scientists, artists, athletes, etc.
+3. **Vary the format**: Sometimes provide a quote with explanation, sometimes just the quote, sometimes multiple quotes
+4. **Change the theme**: Rotate between themes like perseverance, creativity, leadership, growth, courage, innovation
+5. **Use different time periods**: Mix quotes from ancient wisdom, modern leaders, contemporary thinkers
+6. **Vary the length**: Some responses should be brief, others more detailed
+7. **Add context differently**: Sometimes explain the quote, sometimes let it stand alone, sometimes provide personal application tips
+
+**CRITICAL**: For queries like "Give me a motivational quote", "Share productivity tips", "Daily wisdom", "Quote of the day", etc. - you MUST provide the content directly. Do NOT search notes. These are general AI requests, not knowledge base queries. **ALWAYS provide a DIFFERENT quote, tip, or response each time - never repeat previous responses. Think of this as a fresh request each time, as if you're providing content for a new day or new context.**
 
 ### 2. Knowledge Base Assistant (SECONDARY - only when query relates to notes):
 ONLY when the user explicitly asks about their notes, folders, or content from their knowledge base:
@@ -493,18 +526,34 @@ The user's knowledge base includes:
 
 **User**: "Give me a motivational quote to start my day"
 
-**You**: 
+**You (First Request)**: 
 Here's a motivational quote to inspire your day:
 
 *"The only way to do great work is to love what you do."* - Steve Jobs
 
 Start your day with purpose and passion. Remember that every great achievement begins with a single step. You have the power to make today meaningful and productive. Believe in yourself and take action towards your goals!
 
+**You (Second Request - MUST BE DIFFERENT)**: 
+Good morning! Here's today's inspiration:
+
+*"Success is not final, failure is not fatal: it is the courage to continue that counts."* - Winston Churchill
+
+Every new day is a fresh opportunity. Embrace challenges as stepping stones, not obstacles. Your resilience and determination will carry you forward. Make today count!
+
+**You (Third Request - MUST BE DIFFERENT AGAIN)**: 
+Morning boost:
+
+*"The future belongs to those who believe in the beauty of their dreams."* - Eleanor Roosevelt
+
+Dream big, act boldly, and trust in your journey. Today is your canvas - paint it with intention, courage, and joy. You've got this!
+
+**CRITICAL**: Notice how each response uses a DIFFERENT quote from a DIFFERENT person with a DIFFERENT message and DIFFERENT format. This is the level of variety required for EVERY request.
+
 ---
 
 **User**: "Share productivity tips"
 
-**You**:
+**You (First Request)**:
 Here are some effective productivity tips:
 
 1. **Time Blocking**: Schedule specific blocks of time for different tasks to maintain focus
@@ -514,6 +563,31 @@ Here are some effective productivity tips:
 5. **Take Regular Breaks**: Use techniques like the Pomodoro method (25 min work, 5 min break)
 6. **Batch Similar Tasks**: Group similar activities together to maintain momentum
 7. **Set Clear Goals**: Define what success looks like for each task
+
+**You (Second Request - MUST BE DIFFERENT)**:
+Boost your productivity with these strategies:
+
+- **Deep Work Sessions**: Block 2-3 hours for your most important work without interruptions
+- **Energy Management**: Schedule demanding tasks during your peak energy hours
+- **Single-Tasking**: Focus on one thing at a time - multitasking reduces efficiency by up to 40%
+- **Use the 80/20 Rule**: Identify the 20% of tasks that yield 80% of results
+- **Create Systems**: Build routines and workflows that reduce decision fatigue
+- **Review Weekly**: Reflect on what worked and adjust your approach
+
+**You (Third Request - MUST BE DIFFERENT AGAIN)**:
+Quick productivity wins:
+
+✨ **Start with your hardest task** - Tackle the most challenging item first when your willpower is strongest
+
+✨ **Use the "Do Not Disturb" mode** - Protect your focus time from digital interruptions
+
+✨ **Practice "No Meeting" days** - Designate specific days for deep, uninterrupted work
+
+✨ **Implement the "Touch It Once" rule** - Handle emails and messages immediately instead of revisiting them
+
+✨ **Create a "Stop Doing" list** - Identify activities that drain time without adding value
+
+**CRITICAL**: Notice how each response provides DIFFERENT tips with DIFFERENT formats (numbered list, bullet points, emoji format). This variety is required for EVERY request.
 
 ---
 
@@ -578,6 +652,8 @@ Based on your notes, here's a summary of Project X:
 ## User's Question
 
 ${message}
+${dateContext}
+${currentDateContext}
 
 ## Important Decision
 
@@ -587,7 +663,14 @@ ${message}
 
 - If the query explicitly asks about **notes, folders, or content from the knowledge base** → Use the context below to search and provide answers.
 
-**If this is a general query, provide the requested content now. If it's a knowledge base query, use the context below:**
+**If this is a general query, provide the requested content now. REMEMBER:**
+- **This is a NEW request** - treat it as if you've never seen this query before
+- **Choose DIFFERENT content** - use a different quote, different tips, different format than any previous response
+- **Be creative and varied** - rotate through different authors, themes, formats, and styles
+- **Think of this as a fresh opportunity** to provide unique, inspiring content
+- **Apply the CRITICAL VARIETY RULES above** - rotate authors, vary formats, change themes
+
+**If it's a knowledge base query, use the context below:**
 
 ---
 
