@@ -48,6 +48,9 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
     const [copiedId, setCopiedId] = React.useState<string | null>(null)
     const [hasApiKey, setHasApiKey] = React.useState<boolean>(propHasApiKey)
     const actualApiKey = propApiKey || getApiKey()
+    const wsRef = React.useRef<WebSocket | null>(null)
+    const reconnectTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
+    const pendingQueriesRef = React.useRef<Map<string, { resolve: (response: any) => void, reject: (error: any) => void }>>(new Map())
 
     // Interactive prompt suggestions - clickable AI requests (general queries, no notes needed) - Best 3
     const promptSuggestions = [
@@ -67,6 +70,90 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
     React.useEffect(() => {
         setHasApiKey(propHasApiKey)
     }, [propHasApiKey])
+
+    // Initialize persistent WebSocket connection
+    React.useEffect(() => {
+        const connectWebSocket = () => {
+            // Don't connect if no API key
+            const apiKey = actualApiKey || getApiKey()
+            if (!apiKey) {
+                return
+            }
+
+            // Close existing connection if any
+            if (wsRef.current) {
+                wsRef.current.close()
+            }
+
+            try {
+                const ws = new WebSocket(WS_URL)
+                wsRef.current = ws
+
+                ws.onopen = () => {
+                    console.log("WebSocket connected")
+                    // Clear any reconnect timeout
+                    if (reconnectTimeoutRef.current) {
+                        clearTimeout(reconnectTimeoutRef.current)
+                        reconnectTimeoutRef.current = null
+                    }
+                }
+
+                ws.onmessage = (event) => {
+                    try {
+                        const response = JSON.parse(event.data.toString())
+                        
+                        // Check if this is a response to a pending query
+                        if (response.queryId && pendingQueriesRef.current.has(response.queryId)) {
+                            const { resolve } = pendingQueriesRef.current.get(response.queryId)!
+                            pendingQueriesRef.current.delete(response.queryId)
+                            resolve(response)
+                            return
+                        }
+
+                        // Fallback: handle response without queryId (backward compatibility)
+                        // This shouldn't happen with the new implementation, but handle it gracefully
+                        console.warn("Received response without queryId")
+                    } catch (error) {
+                        console.error("Failed to parse WebSocket message:", error)
+                    }
+                }
+
+                ws.onerror = (error) => {
+                    console.error("WebSocket error:", error)
+                }
+
+                ws.onclose = () => {
+                    console.log("WebSocket disconnected")
+                    wsRef.current = null
+                    
+                    // Attempt to reconnect after 3 seconds (only if we have an API key)
+                    const apiKey = actualApiKey || getApiKey()
+                    if (apiKey) {
+                        reconnectTimeoutRef.current = setTimeout(() => {
+                            connectWebSocket()
+                        }, 3000)
+                    }
+                }
+            } catch (error) {
+                console.error("Failed to create WebSocket connection:", error)
+            }
+        }
+
+        // Connect on mount
+        connectWebSocket()
+
+        // Cleanup on unmount
+        return () => {
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current)
+            }
+            if (wsRef.current) {
+                wsRef.current.close()
+                wsRef.current = null
+            }
+            pendingQueriesRef.current.clear()
+        }
+    }, [actualApiKey])
 
     const enqueue = async (cmd: string) => {
         // Use API key from props or get from storage
@@ -106,93 +193,108 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             ? { temperature: 0.9, maxTokens: 4000 } // Higher temperature for varied, creative responses
             : DEFAULT_CONFIG // Lower temperature for accurate knowledge base queries
 
-        // Create WebSocket connection
+        // Get conversation history (last 5 successful general queries for variety)
+        const recentGeneralQueries = runs
+            .filter(r => {
+                if (r.status !== "success") return false
+                const cmdLower = r.command.toLowerCase()
+                return cmdLower.includes("quote") || cmdLower.includes("motivation") || cmdLower.includes("productivity tip")
+            })
+            .slice(0, 5)
+            .map(r => ({ command: r.command, response: r.output }))
+
+        // Send query via persistent WebSocket connection
         try {
-            const ws = new WebSocket(WS_URL)
+            const ws = wsRef.current
 
-            ws.onopen = () => {
-                // Send query message
-                const message = {
-                    message: cmd,
-                    apiKey: apiKey,
-                    model: DEFAULT_MODEL,
-                    config: config,
-                    operationType: "query" as const,
-                    notes: isGeneralQuery ? "" : JSON.stringify(notes),
-                    folders: isGeneralQuery ? "" : JSON.stringify(folders)
+            // Wait for connection if not ready
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                // Wait up to 5 seconds for connection
+                let attempts = 0
+                while ((!ws || ws.readyState !== WebSocket.OPEN) && attempts < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100))
+                    attempts++
                 }
-                ws.send(JSON.stringify(message))
-            }
 
-            ws.onmessage = (event) => {
-                try {
-                    const response = JSON.parse(event.data.toString())
-                    
-                    if (response.success && response.type === "query") {
-                        // Success - update run with response
-                        setRuns(prev => prev.map(r => r.id === id ? { 
-                            ...r, 
-                            status: "success", 
-                            output: response.response || "No response received" 
-                        } : r))
-                    } else if (response.error) {
-                        // Error - update run with error
-                        setRuns(prev => prev.map(r => r.id === id ? { 
-                            ...r, 
-                            status: "error", 
-                            output: `Error: ${response.error}` 
-                        } : r))
-                        if (response.error.includes("API key") || response.error.includes("apiKey")) {
-                            setHasApiKey(false)
-                        }
-                    } else {
-                        // Unknown response format
-                        setRuns(prev => prev.map(r => r.id === id ? { 
-                            ...r, 
-                            status: "error", 
-                            output: `Unexpected response format: ${JSON.stringify(response)}` 
-                        } : r))
-                    }
-                } catch (error) {
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
                     setRuns(prev => prev.map(r => r.id === id ? { 
                         ...r, 
                         status: "error", 
-                        output: `Failed to parse response: ${error instanceof Error ? error.message : String(error)}` 
+                        output: "WebSocket not connected. Please wait a moment and try again." 
                     } : r))
+                    return
                 }
-                ws.close()
             }
 
-            ws.onerror = (error) => {
+            // Create promise for this query
+            const queryPromise = new Promise<any>((resolve, reject) => {
+                pendingQueriesRef.current.set(id, { resolve, reject })
+
+                // Timeout after 60 seconds
+                setTimeout(() => {
+                    if (pendingQueriesRef.current.has(id)) {
+                        pendingQueriesRef.current.delete(id)
+                        reject(new Error("Request timeout: No response received within 60 seconds."))
+                    }
+                }, 60000)
+            })
+
+            // Send query message
+            const message = {
+                queryId: id,
+                message: cmd,
+                apiKey: apiKey,
+                model: DEFAULT_MODEL,
+                config: config,
+                operationType: "query" as const,
+                notes: isGeneralQuery ? "" : JSON.stringify(notes),
+                folders: isGeneralQuery ? "" : JSON.stringify(folders),
+                conversationHistory: isGeneralQuery ? recentGeneralQueries : []
+            }
+            ws.send(JSON.stringify(message))
+
+            // Handle response
+            try {
+                const response = await queryPromise
+                
+                if (response.success && response.type === "query") {
+                    // Success - update run with response
+                    setRuns(prev => prev.map(r => r.id === id ? { 
+                        ...r, 
+                        status: "success", 
+                        output: response.response || "No response received" 
+                    } : r))
+                } else if (response.error) {
+                    // Error - update run with error
+                    setRuns(prev => prev.map(r => r.id === id ? { 
+                        ...r, 
+                        status: "error", 
+                        output: `Error: ${response.error}` 
+                    } : r))
+                    if (response.error.includes("API key") || response.error.includes("apiKey")) {
+                        setHasApiKey(false)
+                    }
+                } else {
+                    // Unknown response format
+                    setRuns(prev => prev.map(r => r.id === id ? { 
+                        ...r, 
+                        status: "error", 
+                        output: `Unexpected response format: ${JSON.stringify(response)}` 
+                    } : r))
+                }
+            } catch (error) {
                 setRuns(prev => prev.map(r => r.id === id ? { 
                     ...r, 
                     status: "error", 
-                    output: `WebSocket error: Could not connect to server at ${WS_URL}. Make sure the WebSocket server is running.` 
+                    output: error instanceof Error ? error.message : String(error)
                 } : r))
-                ws.close()
             }
-
-            ws.onclose = () => {
-                // Connection closed
-            }
-
-            // Timeout after 60 seconds
-            setTimeout(() => {
-                if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-                    ws.close()
-                    setRuns(prev => prev.map(r => r.id === id ? { 
-                        ...r, 
-                        status: "error", 
-                        output: "Request timeout: No response received within 60 seconds." 
-                    } : r))
-                }
-            }, 60000)
 
         } catch (error) {
             setRuns(prev => prev.map(r => r.id === id ? { 
                 ...r, 
                 status: "error", 
-                output: `Failed to create WebSocket connection: ${error instanceof Error ? error.message : String(error)}` 
+                output: `Failed to send query: ${error instanceof Error ? error.message : String(error)}` 
             } : r))
         }
     }
