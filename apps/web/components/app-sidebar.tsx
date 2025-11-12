@@ -12,6 +12,92 @@ import {
   PieChart,
   Settings2,
   SquareTerminal,
+  GripVertical,
+  Edit,
+  Folder,
+  FolderOpen,
+  FolderKanban,
+  FolderSync,
+  FolderSearch,
+  FolderTree,
+  FolderX,
+  FolderCheck,
+  FolderLock,
+  FolderHeart,
+  FolderKey,
+  FolderCog,
+  FolderArchive,
+  FolderGit,
+  Star,
+  Heart,
+  Zap,
+  Rocket,
+  Lightbulb,
+  Brain,
+  Code,
+  Database,
+  Globe,
+  Mail,
+  Users,
+  Home,
+  Coffee,
+  Camera,
+  Music,
+  Palette,
+  Award,
+  Trophy,
+  Crown,
+  Gem,
+  Sparkles,
+  Sun,
+  Moon,
+  Cloud,
+  Leaf,
+  Flower2,
+  Bug,
+  Bird,
+  Cat,
+  Dog,
+  Car,
+  Plane,
+  Ship,
+  Train,
+  Bike,
+  Compass,
+  MapPin,
+  Navigation,
+  Tags,
+  Hash,
+  Activity,
+  TrendingUp,
+  BarChart,
+  LineChart,
+  Notebook,
+  FileText,
+  Image,
+  Video,
+  Archive,
+  Briefcase,
+  Calendar,
+  Clock,
+  Target,
+  Shield,
+  Key,
+  Lock,
+  Unlock,
+  Wrench,
+  Hammer,
+  Scissors,
+  PenTool,
+  Brush,
+  Gamepad2,
+  Headphones,
+  Mic,
+  Film,
+  ShoppingBag,
+  CreditCard,
+  Building,
+  Footprints,
 } from "lucide-react"
 
 import { NavMain } from "@/components/nav-main"
@@ -25,7 +111,7 @@ import {
   SidebarHeader,
   SidebarRail,
 } from "@/components/ui/sidebar"
-import { getFolders, getNotes, setFolders, setNotes, deleteFolder, deleteNote, updateFolder } from "@/services/localstorage"
+import { getFolders, getNotes, setFolders, setNotes, deleteFolder, deleteNote, updateFolder, reorderFolders, reorderNotes, moveNoteToFolder } from "@/services/localstorage"
 // custom sidebar preloader
 function SidebarLoader(){
   return (
@@ -175,6 +261,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [pickingPosition, setPickingPosition] = React.useState<{ x: number; y: number } | null>(null);
   const [editingFolderId, setEditingFolderId] = React.useState<string | null>(null);
   const [editFolderName, setEditFolderName] = React.useState("");
+  const [editMode, setEditMode] = React.useState<boolean>(false);
 
   const lucideIcons = [
     AudioWaveform,
@@ -187,6 +274,16 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     PieChart,
     Settings2,
     SquareTerminal,
+    Folder,
+    FolderOpen,
+    Star,
+    Heart,
+    Zap,
+    Rocket,
+    Lightbulb,
+    Brain,
+    Code,
+    Globe,
   ];
 
   const hashString = (value: string) => {
@@ -209,6 +306,90 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     PieChart,
     Settings2,
     SquareTerminal,
+    Folder,
+    FolderOpen,
+    FolderKanban,
+    FolderSync,
+    FolderSearch,
+    FolderTree,
+    FolderX,
+    FolderCheck,
+    FolderLock,
+    FolderHeart,
+    FolderKey,
+    FolderCog,
+    FolderArchive,
+    FolderGit,
+    Star,
+    Heart,
+    Zap,
+    Rocket,
+    Lightbulb,
+    Brain,
+    Code,
+    Database,
+    Globe,
+    Mail,
+    Users,
+    Home,
+    Coffee,
+    Camera,
+    Music,
+    Palette,
+    Award,
+    Trophy,
+    Crown,
+    Gem,
+    Sparkles,
+    Sun,
+    Moon,
+    Cloud,
+    Leaf,
+    Flower2,
+    Bug,
+    Bird,
+    Cat,
+    Dog,
+    Car,
+    Plane,
+    Ship,
+    Train,
+    Bike,
+    Compass,
+    MapPin,
+    Navigation,
+    Tags,
+    Hash,
+    Activity,
+    TrendingUp,
+    BarChart,
+    LineChart,
+    Notebook,
+    FileText,
+    Image,
+    Video,
+    Archive,
+    Briefcase,
+    Calendar,
+    Clock,
+    Target,
+    Shield,
+    Key,
+    Lock,
+    Unlock,
+    Wrench,
+    Hammer,
+    Scissors,
+    PenTool,
+    Brush,
+    Gamepad2,
+    Headphones,
+    Mic,
+    Film,
+    ShoppingBag,
+    CreditCard,
+    Building,
+    Footprints,
   };
 
   const iconOptions = Object.keys(iconKeyToComponent).map((key) => ({ key, Icon: iconKeyToComponent[key] }));
@@ -401,6 +582,21 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     setEditFolderName("");
   };
 
+  const handleReorderFolders = (folderIds: string[]) => {
+    reorderFolders(folderIds);
+    setFoldersState(getFolders());
+  };
+
+  const handleReorderNotes = (noteIds: string[], folderId: string | null) => {
+    reorderNotes(noteIds, folderId);
+    setNotesState(getNotes());
+  };
+
+  const handleMoveNote = (noteId: string, targetFolderId: string | null) => {
+    moveNoteToFolder(noteId, targetFolderId);
+    setNotesState(getNotes());
+  };
+
 
   return (
     <Sidebar collapsible="icon" {...props}>
@@ -442,6 +638,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           onChangeNewName={setNewFolderName}
           onConfirmAdd={handleConfirmAdd}
           onCancelAdd={handleCancelAdd}
+          editMode={editMode}
+          onToggleEditMode={() => setEditMode(!editMode)}
+          onReorderFolders={handleReorderFolders}
+          onReorderNotes={handleReorderNotes}
+          onMoveNote={handleMoveNote}
         />
         )}
         {/* <NavProjects projects={dummy.projects} /> */}

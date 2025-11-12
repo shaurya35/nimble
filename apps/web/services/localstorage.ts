@@ -39,7 +39,13 @@ const getFolders = (): Folder[] => {
 	if (typeof window === "undefined") {
 		return [];
 	}
-	return safeParse<Folder[]>(localStorage.getItem(FOLDERS_KEY), []);
+	const folders = safeParse<Folder[]>(localStorage.getItem(FOLDERS_KEY), []);
+	// Sort by order field if present, otherwise maintain array order (backward compatible)
+	return folders.sort((a, b) => {
+		const orderA = a.order ?? Infinity;
+		const orderB = b.order ?? Infinity;
+		return orderA - orderB;
+	});
 }
 
 const setFolders = (folders: Folder[]): void => {
@@ -56,7 +62,13 @@ const getNotes = (): Note[] => {
 	if (typeof window === "undefined") {
 		return [];
 	}
-	return safeParse<Note[]>(localStorage.getItem(NOTES_KEY), []);
+	const notes = safeParse<Note[]>(localStorage.getItem(NOTES_KEY), []);
+	// Sort by order field if present, otherwise maintain array order (backward compatible)
+	return notes.sort((a, b) => {
+		const orderA = a.order ?? Infinity;
+		const orderB = b.order ?? Infinity;
+		return orderA - orderB;
+	});
 };
   
 const setNotes = (notes: Note[]): void => {
@@ -121,6 +133,60 @@ const getNotesByFolder = (folderId: string | null): Note[] => {
 	return getNotes().filter(n => n.folderId === folderId);
 };
 
+const reorderFolders = (folderIds: string[]): void => {
+	const folders = getFolders();
+	const reordered = folderIds.map((id, index) => {
+		const folder = folders.find(f => f.id === id);
+		if (!folder) return null;
+		return { ...folder, order: index };
+	}).filter((f): f is Folder => f !== null);
+	
+	// Add any folders not in the reordered list (shouldn't happen, but safety check)
+	const existingIds = new Set(folderIds);
+	folders.forEach(folder => {
+		if (!existingIds.has(folder.id)) {
+			reordered.push(folder);
+		}
+	});
+	
+	setFolders(reordered);
+};
+
+const reorderNotes = (noteIds: string[], folderId: string | null): void => {
+	const notes = getNotes();
+	const reordered = noteIds.map((id, index) => {
+		const note = notes.find(n => n.id === id);
+		if (!note) return null;
+		return { ...note, order: index, folderId };
+	}).filter((n): n is Note => n !== null);
+	
+	// Update notes that were moved or reordered
+	reordered.forEach(note => {
+		upsertNote(note);
+	});
+	
+	// Update order for notes that weren't in the reordered list but are in the same folder
+	notes.forEach(note => {
+		if (note.folderId === folderId && !noteIds.includes(note.id)) {
+			// Keep existing order or assign a high order
+			if (note.order === undefined) {
+				upsertNote({ ...note, order: 9999 });
+			}
+		}
+	});
+};
+
+const moveNoteToFolder = (noteId: string, targetFolderId: string | null): void => {
+	const notes = getNotes();
+	const note = notes.find(n => n.id === noteId);
+	if (!note) return;
+	
+	const targetFolderNotes = notes.filter(n => n.folderId === targetFolderId);
+	const newOrder = targetFolderNotes.length;
+	
+	upsertNote({ ...note, folderId: targetFolderId, order: newOrder });
+};
+
 export {
 	read,
 	write,
@@ -136,4 +202,7 @@ export {
 	updateNote,
 	deleteNote,
 	getNotesByFolder,
+	reorderFolders,
+	reorderNotes,
+	moveNoteToFolder,
 };

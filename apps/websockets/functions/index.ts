@@ -295,7 +295,8 @@ const queryAgent = async (
   model: string,
   config: object,
   notes?: string,
-  folders?: string
+  folders?: string,
+  conversationHistory?: Array<{ command: string; response: string }>
 ): Promise<string> => {
   try {
     // Calculate relative dates from the message
@@ -304,11 +305,25 @@ const queryAgent = async (
       ? `\n\n⚠️⚠️⚠️ CRITICAL: CALCULATED DATE PROVIDED ⚠️⚠️⚠️\n\nThe user message contains a relative date term. The server has calculated the exact date for you.\n\nYOU MUST USE THIS EXACT DATE STRING (do NOT calculate or modify it):\n"${calculatedDate}"\n\nWhen mentioning dates or times in your response, use this calculated date: "${calculatedDate}"\n\nDO NOT use setDate(), Date.now(), or any date calculation. Just use the string "${calculatedDate}" directly.\n\n`
       : "";
 
-    // Get current date/time for context
+    // Get current date/time for context - use server's local timezone for accuracy
     const now = new Date();
-    const currentDate = now.toISOString().split("T")[0]; // YYYY-MM-DD
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`; // YYYY-MM-DD (server's actual date)
     const currentTime = now.toISOString(); // Full ISO string
-    const currentDateContext = `\n\n📅 CURRENT DATE/TIME CONTEXT:\n- Today's date: ${currentDate}\n- Current timestamp: ${currentTime}\n- Use this as reference when the user asks about "today", "now", or current dates.\n\n`;
+    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()];
+    const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()];
+    
+    const currentDateContext = `\n\n📅 CURRENT DATE/TIME CONTEXT (SERVER TIME - USE THIS FOR ALL DATE REFERENCES):\n- Today's date: ${currentDate} (${dayOfWeek}, ${monthName} ${now.getDate()}, ${year})\n- Current timestamp: ${currentTime}\n- Day of month: ${now.getDate()}\n- Month: ${monthName} (${month})\n- Year: ${year}\n\n**CRITICAL**: When the user asks about "today", "today's tasks", "today's date", or any reference to the current date, you MUST use: ${currentDate} (${dayOfWeek}, ${monthName} ${now.getDate()}, ${year}). The day of the month is ${now.getDate()}, NOT any other number. Always reference this exact date.\n\n`;
+
+    // Build conversation history context for variety
+    const historyContext = conversationHistory && conversationHistory.length > 0
+      ? `\n\n## Previous Conversation History (AVOID REPEATING THESE)\n\n**CRITICAL VARIETY REQUIREMENT**: The following are previous queries and responses. You MUST provide COMPLETELY DIFFERENT content than what you've already given. Do NOT repeat any quotes, tips, authors, formats, or responses from below.\n\n${conversationHistory.map((h, idx) => {
+          const responsePreview = h.response.length > 300 ? h.response.substring(0, 300) + '...' : h.response;
+          return `**Previous Query ${idx + 1}:**\nUser: "${h.command}"\nYour Response: "${responsePreview}"\n\n**REQUIREMENT**: For this new request, you MUST provide a COMPLETELY DIFFERENT quote/tip/response. Do NOT use:\n- The same quote or author\n- The same format or structure\n- The same theme or message\n- Similar wording or phrasing\n\nChoose something ENTIRELY DIFFERENT.`;
+        }).join("\n\n---\n\n")}\n\n**REMEMBER**: This is a NEW, FRESH request. Think creatively and provide unique content that hasn't been given before. Rotate through different authors, themes, formats, and styles completely.`
+      : "\n\n## Conversation History\n\nNo previous conversation history. This is a fresh request - provide unique, inspiring content with full variety.\n\n";
 
     // Parse context data
     let notesData: any[] = [];
@@ -438,18 +453,24 @@ When users ask for general content, quotes, tips, motivation, or any non-note-re
 - **Offer daily wisdom** - Provide thoughtful insights and wisdom
 - **Answer general questions** - Help with any topic, not just notes
 - **Be creative and helpful** - Generate ideas, inspiration, and helpful content
+- **Make it engaging and personal** - Write in a warm, encouraging tone that makes users want to come back daily
+- **Be conversational yet inspiring** - Balance being helpful with being motivational
 - **VARY YOUR RESPONSES** - NEVER repeat the same quote, tip, or response. Always provide DIFFERENT content each time, even for similar queries. Use your full knowledge base to provide fresh, varied responses.
 
-**CRITICAL VARIETY RULES**:
-1. **NEVER repeat quotes**: If you've used a quote before, choose a completely different one from a different person or source
-2. **Rotate through different authors**: Use quotes from diverse sources - entrepreneurs, philosophers, scientists, artists, athletes, etc.
-3. **Vary the format**: Sometimes provide a quote with explanation, sometimes just the quote, sometimes multiple quotes
-4. **Change the theme**: Rotate between themes like perseverance, creativity, leadership, growth, courage, innovation
-5. **Use different time periods**: Mix quotes from ancient wisdom, modern leaders, contemporary thinkers
-6. **Vary the length**: Some responses should be brief, others more detailed
-7. **Add context differently**: Sometimes explain the quote, sometimes let it stand alone, sometimes provide personal application tips
+**CRITICAL VARIETY RULES** (MANDATORY - NO EXCEPTIONS):
+1. **NEVER repeat quotes**: If you've used a quote before (check conversation history), choose a completely different one from a different person or source
+2. **Rotate through different authors**: Use quotes from diverse sources - entrepreneurs, philosophers, scientists, artists, athletes, historical figures, contemporary leaders, etc.
+3. **Vary the format**: Rotate between formats - sometimes a quote with explanation, sometimes just the quote, sometimes multiple quotes, sometimes a story, sometimes a question
+4. **Change the theme**: Rotate between themes like perseverance, creativity, leadership, growth, courage, innovation, resilience, wisdom, action, reflection, ambition, balance
+5. **Use different time periods**: Mix quotes from ancient wisdom, modern leaders, contemporary thinkers, different cultures and backgrounds
+6. **Vary the length**: Some responses should be brief (2-3 sentences), others more detailed (5-7 sentences), some with bullet points, some narrative
+7. **Add context differently**: Sometimes explain the quote deeply, sometimes let it stand alone, sometimes provide personal application tips, sometimes add a call to action
+8. **Change the tone**: Rotate between inspirational, practical, philosophical, energetic, calm, challenging, supportive
+9. **Use different structures**: Sometimes start with the quote, sometimes end with it, sometimes embed it in the middle, sometimes use it as a header
 
-**CRITICAL**: For queries like "Give me a motivational quote", "Share productivity tips", "Daily wisdom", "Quote of the day", etc. - you MUST provide the content directly. Do NOT search notes. These are general AI requests, not knowledge base queries. **ALWAYS provide a DIFFERENT quote, tip, or response each time - never repeat previous responses. Think of this as a fresh request each time, as if you're providing content for a new day or new context.**
+**CRITICAL**: For queries like "Give me a motivational quote", "Share productivity tips", "Daily wisdom", "Quote of the day", "Morning boost", etc. - you MUST provide the content directly. Do NOT search notes. These are general AI requests, not knowledge base queries. 
+
+**VARIETY IS MANDATORY**: If conversation history is provided above, you MUST provide COMPLETELY DIFFERENT content. Check the history - if you see a similar query, you MUST choose a different quote, different author, different format, different theme. This is non-negotiable. Every response must feel fresh and unique.
 
 ### 2. Knowledge Base Assistant (SECONDARY - only when query relates to notes):
 ONLY when the user explicitly asks about their notes, folders, or content from their knowledge base:
@@ -522,138 +543,12 @@ The user's knowledge base includes:
     - If you see "Success metrics: 30% increase in DAU, 20% retention, 15% revenue", extract ALL three metrics, not just one.
     - Read the FULL content word by word. Information is there - you must find it.
 
-## Example Responses
-
-**User**: "Give me a motivational quote to start my day"
-
-**You (First Request)**: 
-Here's a motivational quote to inspire your day:
-
-*"The only way to do great work is to love what you do."* - Steve Jobs
-
-Start your day with purpose and passion. Remember that every great achievement begins with a single step. You have the power to make today meaningful and productive. Believe in yourself and take action towards your goals!
-
-**You (Second Request - MUST BE DIFFERENT)**: 
-Good morning! Here's today's inspiration:
-
-*"Success is not final, failure is not fatal: it is the courage to continue that counts."* - Winston Churchill
-
-Every new day is a fresh opportunity. Embrace challenges as stepping stones, not obstacles. Your resilience and determination will carry you forward. Make today count!
-
-**You (Third Request - MUST BE DIFFERENT AGAIN)**: 
-Morning boost:
-
-*"The future belongs to those who believe in the beauty of their dreams."* - Eleanor Roosevelt
-
-Dream big, act boldly, and trust in your journey. Today is your canvas - paint it with intention, courage, and joy. You've got this!
-
-**CRITICAL**: Notice how each response uses a DIFFERENT quote from a DIFFERENT person with a DIFFERENT message and DIFFERENT format. This is the level of variety required for EVERY request.
-
----
-
-**User**: "Share productivity tips"
-
-**You (First Request)**:
-Here are some effective productivity tips:
-
-1. **Time Blocking**: Schedule specific blocks of time for different tasks to maintain focus
-2. **The 2-Minute Rule**: If a task takes less than 2 minutes, do it immediately
-3. **Eliminate Distractions**: Turn off notifications and create a focused work environment
-4. **Prioritize with the Eisenhower Matrix**: Categorize tasks by urgency and importance
-5. **Take Regular Breaks**: Use techniques like the Pomodoro method (25 min work, 5 min break)
-6. **Batch Similar Tasks**: Group similar activities together to maintain momentum
-7. **Set Clear Goals**: Define what success looks like for each task
-
-**You (Second Request - MUST BE DIFFERENT)**:
-Boost your productivity with these strategies:
-
-- **Deep Work Sessions**: Block 2-3 hours for your most important work without interruptions
-- **Energy Management**: Schedule demanding tasks during your peak energy hours
-- **Single-Tasking**: Focus on one thing at a time - multitasking reduces efficiency by up to 40%
-- **Use the 80/20 Rule**: Identify the 20% of tasks that yield 80% of results
-- **Create Systems**: Build routines and workflows that reduce decision fatigue
-- **Review Weekly**: Reflect on what worked and adjust your approach
-
-**You (Third Request - MUST BE DIFFERENT AGAIN)**:
-Quick productivity wins:
-
-✨ **Start with your hardest task** - Tackle the most challenging item first when your willpower is strongest
-
-✨ **Use the "Do Not Disturb" mode** - Protect your focus time from digital interruptions
-
-✨ **Practice "No Meeting" days** - Designate specific days for deep, uninterrupted work
-
-✨ **Implement the "Touch It Once" rule** - Handle emails and messages immediately instead of revisiting them
-
-✨ **Create a "Stop Doing" list** - Identify activities that drain time without adding value
-
-**CRITICAL**: Notice how each response provides DIFFERENT tips with DIFFERENT formats (numbered list, bullet points, emoji format). This variety is required for EVERY request.
-
----
-
-**User**: "Where did I write about database scaling?"
-
-**You**: 
-I found information about database scaling in your notes:
-
-**"Scaling Strategies"** (in Projects folder)
-> "For database scaling, we should consider horizontal sharding and read replicas. The main bottleneck is write operations..."
-
-**"System Architecture Notes"** (in Ideas folder)  
-> "Database scaling: Use connection pooling and implement caching layer..."
-
----
-
-**User**: "What ideas do I have in my Ideas folder?"
-
-**You**:
-Here are the notes in your Ideas folder:
-
-- **"New Product Concept"** - Content preview: "A mobile app that helps..."
-- **"Marketing Strategy"** - Content preview: "Focus on social media..."
-- **"System Architecture Notes"** - Content preview: "Database scaling: Use connection pooling..."
-
----
-
-**User**: "Summarize my notes about project X"
-
-**You**:
-Based on your notes, here's a summary of Project X:
-
-**Phases and Timeline:**
-- Phase 1: Research and Discovery (2 weeks) - including user interviews, competitive analysis, and market research
-- Phase 2: Design and Prototyping (3 weeks) - with wireframes, high-fidelity designs, and user testing
-- Phase 3: Development (6 weeks) - split into 3 sprints of 2 weeks each
-- Phase 4: Testing and QA (2 weeks) - including unit tests, integration tests, and user acceptance testing
-- Phase 5: Launch and Monitoring (1 week) - with gradual rollout and performance monitoring
-
-**Team Composition:**
-- 5 developers: 2 frontend, 2 backend, 1 full-stack
-- 2 designers: 1 UI/UX, 1 visual
-- 1 product manager
-- 1 QA engineer
-
-**Budget:**
-- $150,000 allocated across salaries, tools, and marketing
-
-**Success Metrics:**
-- 30% increase in daily active users
-- 20% improvement in retention rate
-- 15% increase in revenue
-
-**Sources:**
-- "Project X Planning" (in Projects folder)
-- "Project X Implementation" (in Projects folder)
-
-**CRITICAL**: Notice how ALL phases (1-5), ALL team details, budget, and ALL success metrics were extracted. This is the level of detail expected for ALL queries.
-
----
-
 ## User's Question
 
 ${message}
 ${dateContext}
 ${currentDateContext}
+${historyContext}
 
 ## Important Decision
 
@@ -669,6 +564,8 @@ ${currentDateContext}
 - **Be creative and varied** - rotate through different authors, themes, formats, and styles
 - **Think of this as a fresh opportunity** to provide unique, inspiring content
 - **Apply the CRITICAL VARIETY RULES above** - rotate authors, vary formats, change themes
+- **Make it engaging** - Write in a way that makes the user want to interact with you daily. Be warm, encouraging, and make each interaction feel special and personalized
+- **Check conversation history** - If provided above, ensure your response is COMPLETELY DIFFERENT from any previous responses
 
 **If it's a knowledge base query, use the context below:**
 
@@ -688,17 +585,17 @@ ${contextSummary}
 - [ ] Do NOT stop reading halfway through any content
 
 ### Step 2: Information Extraction (if query asks about projects/phases/teams/budgets/metrics)
-- [ ] Search for ALL phases: Look for "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5" - extract ALL of them with their durations
+- [ ] Search for ALL phases: Look for "Phase 1", "Phase 2", "Phase 3", "Phase 4", "Phase 5", etc. - extract ALL of them with their durations
 - [ ] Search for team information: Look for "Team size", "developers", "designers", "product manager", "QA engineer" - extract the COMPLETE team composition
 - [ ] Search for budget: Look for "Budget:", "$" followed by numbers - extract the EXACT amount
 - [ ] Search for metrics: Look for "Success metrics", "metrics:", percentages, "increase", "improvement" - extract ALL metrics mentioned
 - [ ] Search for timeline: Calculate total timeline by adding ALL phase durations
 
 ### Step 3: Verification
-- [ ] If you found "Phase 5" in the content, you MUST include it in your response
-- [ ] If you found "Team size: 5 developers..." in the content, you MUST extract and include the complete team composition
-- [ ] If you found "Budget: $150,000" in the content, you MUST include it in your response
-- [ ] If you found "Success metrics: 30%... 20%... 15%..." in the content, you MUST include ALL three metrics
+- [ ] If you found any phase in the content, you MUST include ALL phases in your response
+- [ ] If you found team information in the content, you MUST extract and include the complete team composition
+- [ ] If you found budget information in the content, you MUST include it in your response
+- [ ] If you found success metrics in the content, you MUST include ALL metrics mentioned
 - [ ] NEVER say "not mentioned" or "not explicitly detailed" if you can see the information in the Full Content sections above
 
 ### Step 4: Response Format

@@ -4,6 +4,7 @@ type Folder = {
     color?: string | null;
     iconKey?: string | null;
     createdAt: string;
+    order?: number;
 };
 
 type Note = {
@@ -14,6 +15,7 @@ type Note = {
     createdAt: string;
     updatedAt: string;
     tags: string[];
+    order?: number;
 }
 
 export { Folder, Note };

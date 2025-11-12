@@ -4,6 +4,8 @@ import * as React from "react"
 import { Play, Loader2, Clipboard, Check, Sparkles, Wand2, ListTodo, NotebookPen, Trash2, Zap, Command, Bot, Eye, EyeOff, Key, Pencil, X, Sunrise, Lightbulb, Target, BookOpen, Coffee, TrendingUp, Brain, Rocket, Search, BarChart3, Link2, FileText, GitBranch, Sparkles as SparklesIcon, BookOpen as BookOpenIcon, RefreshCw, CheckSquare, KeyRound } from "lucide-react"
 import { useSelectedNote } from "@/components/notes/selected-note-context"
 import { getNotes, getFolders } from "@/services/localstorage"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
 
 type RunStatus = "queued" | "running" | "success" | "error"
 
@@ -15,19 +17,15 @@ type Run = {
     output: string
 }
 
-// WebSocket server URL - adjust for production
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000"
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"
 
-// API Key - get from localStorage or environment variable
 const getApiKey = (): string => {
     if (typeof window === "undefined") return ""
-    // Check localStorage first, then env variable
     const stored = localStorage.getItem("gemini_api_key")
     if (stored) return stored
     return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
 }
 
-// Model configuration
 const DEFAULT_MODEL = "gemini-2.5-flash"
 const DEFAULT_CONFIG = {
     temperature: 0.3,
@@ -47,51 +45,96 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
     const [runs, setRuns] = React.useState<Run[]>([])
     const [copiedId, setCopiedId] = React.useState<string | null>(null)
     const [hasApiKey, setHasApiKey] = React.useState<boolean>(propHasApiKey)
-    const actualApiKey = propApiKey || getApiKey()
     const wsRef = React.useRef<WebSocket | null>(null)
     const reconnectTimeoutRef = React.useRef<NodeJS.Timeout | null>(null)
     const pendingQueriesRef = React.useRef<Map<string, { resolve: (response: any) => void, reject: (error: any) => void }>>(new Map())
+    const isConnectingRef = React.useRef<boolean>(false)
+    const shouldReconnectRef = React.useRef<boolean>(true)
+    const apiKeyRef = React.useRef<string>("")
+    
+    const actualApiKey = React.useMemo(() => {
+        const key = propApiKey || getApiKey()
+        if (key !== apiKeyRef.current) {
+            apiKeyRef.current = key
+        }
+        return key
+    }, [propApiKey])
 
-    // Interactive prompt suggestions - clickable AI requests (general queries, no notes needed) - Best 3
     const promptSuggestions = [
         { icon: Sunrise, text: "Morning boost", prompt: "Give me a motivational quote to start my day", isGeneral: true },
         { icon: Zap, text: "Productivity hack", prompt: "Share a quick productivity tip I can use today", isGeneral: true },
         { icon: BookOpen, text: "Quote of the day", prompt: "Give me an inspiring quote of the day", isGeneral: true },
     ]
 
-    // Quick actions for knowledge base queries (needs notes) - Best 3
     const quickActions = [
         { icon: RefreshCw, text: "Catch me up", prompt: "Give me a brief summary of all my notes and tasks to catch me up on what I've been working on", isGeneral: false },
         { icon: CheckSquare, text: "Find action items", prompt: "Scan through all my notes and pull out a checklist of to-dos, action items, and next steps that I need to complete", isGeneral: false },
         { icon: BarChart3, text: "What's important?", prompt: "Review all my notes and tell me what are the most important topics, deadlines, or action items I should focus on", isGeneral: false },
     ]
 
-    // Sync API key from props
     React.useEffect(() => {
         setHasApiKey(propHasApiKey)
     }, [propHasApiKey])
 
-    // Initialize persistent WebSocket connection
+    const enqueueRef = React.useRef<(cmd: string) => Promise<void>>(async () => {})
+    
     React.useEffect(() => {
+        const handleAiQuery = (event: CustomEvent) => {
+            const { prompt } = event.detail || {}
+            if (prompt && hasApiKey && enqueueRef.current) {
+                enqueueRef.current(prompt)
+            }
+        }
+
+        window.addEventListener("nimble:ai-query", handleAiQuery as EventListener)
+        return () => {
+            window.removeEventListener("nimble:ai-query", handleAiQuery as EventListener)
+        }
+    }, [hasApiKey])
+
+    React.useEffect(() => {
+        let mounted = true
+        
         const connectWebSocket = () => {
-            // Don't connect if no API key
-            const apiKey = actualApiKey || getApiKey()
+            if (!mounted) {
+                return
+            }
+            
+            const apiKey = apiKeyRef.current || getApiKey()
             if (!apiKey) {
+                console.log("No API key, skipping WebSocket connection")
                 return
             }
 
-            // Close existing connection if any
-            if (wsRef.current) {
+            if (isConnectingRef.current) {
+                console.log("Already connecting, skipping...")
+                return
+            }
+
+            if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+                console.log("WebSocket already connected")
+                return
+            }
+
+            if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+                console.log("Closing existing connection...")
                 wsRef.current.close()
             }
 
+            isConnectingRef.current = true
+
             try {
+                console.log("Attempting to connect WebSocket...")
                 const ws = new WebSocket(WS_URL)
                 wsRef.current = ws
 
                 ws.onopen = () => {
-                    console.log("WebSocket connected")
-                    // Clear any reconnect timeout
+                    if (!mounted) {
+                        ws.close()
+                        return
+                    }
+                    console.log("WebSocket connected successfully")
+                    isConnectingRef.current = false
                     if (reconnectTimeoutRef.current) {
                         clearTimeout(reconnectTimeoutRef.current)
                         reconnectTimeoutRef.current = null
@@ -99,10 +142,10 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                 }
 
                 ws.onmessage = (event) => {
+                    if (!mounted) return
                     try {
                         const response = JSON.parse(event.data.toString())
                         
-                        // Check if this is a response to a pending query
                         if (response.queryId && pendingQueriesRef.current.has(response.queryId)) {
                             const { resolve } = pendingQueriesRef.current.get(response.queryId)!
                             pendingQueriesRef.current.delete(response.queryId)
@@ -110,8 +153,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                             return
                         }
 
-                        // Fallback: handle response without queryId (backward compatibility)
-                        // This shouldn't happen with the new implementation, but handle it gracefully
                         console.warn("Received response without queryId")
                     } catch (error) {
                         console.error("Failed to parse WebSocket message:", error)
@@ -119,44 +160,58 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                 }
 
                 ws.onerror = (error) => {
+                    if (!mounted) return
                     console.error("WebSocket error:", error)
+                    isConnectingRef.current = false
                 }
 
-                ws.onclose = () => {
-                    console.log("WebSocket disconnected")
+                ws.onclose = (event) => {
+                    if (!mounted) return
+                    console.log("WebSocket disconnected", event.code, event.reason)
+                    isConnectingRef.current = false
                     wsRef.current = null
                     
-                    // Attempt to reconnect after 3 seconds (only if we have an API key)
-                    const apiKey = actualApiKey || getApiKey()
-                    if (apiKey) {
+                    const apiKey = apiKeyRef.current || getApiKey()
+                    if (shouldReconnectRef.current && mounted && apiKey && event.code !== 1000) {
+                        console.log("Scheduling reconnect in 3 seconds...")
                         reconnectTimeoutRef.current = setTimeout(() => {
-                            connectWebSocket()
+                            if (shouldReconnectRef.current && mounted) {
+                                connectWebSocket()
+                            }
                         }, 3000)
                     }
                 }
             } catch (error) {
                 console.error("Failed to create WebSocket connection:", error)
+                isConnectingRef.current = false
             }
         }
 
-        // Connect on mount
-        connectWebSocket()
+        const connectTimeout = setTimeout(() => {
+            if (mounted) {
+                connectWebSocket()
+            }
+        }, 100)
 
-        // Cleanup on unmount
         return () => {
+            mounted = false
+            shouldReconnectRef.current = false
+            if (connectTimeout) {
+                clearTimeout(connectTimeout)
+            }
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current)
+                reconnectTimeoutRef.current = null
             }
             if (wsRef.current) {
-                wsRef.current.close()
+                wsRef.current.close(1000, "Component unmounting")
                 wsRef.current = null
             }
             pendingQueriesRef.current.clear()
         }
-    }, [actualApiKey])
+    }, [])
 
-    const enqueue = async (cmd: string) => {
-        // Use API key from props or get from storage
+    const enqueue = React.useCallback(async (cmd: string) => {
         const apiKey = actualApiKey || getApiKey()
         if (!apiKey) {
             setHasApiKey(false)
@@ -168,7 +223,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
         const next: Run = { id, command: cmd, status: "running", createdAt, output: "" }
         setRuns(prev => [next, ...prev])
 
-        // Determine if this is a general query (doesn't need notes) or knowledge base query
         const isGeneralQuery = !cmd.toLowerCase().includes("my notes") && 
                                !cmd.toLowerCase().includes("my folders") &&
                                !cmd.toLowerCase().includes("in my notes") &&
@@ -203,34 +257,33 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             .slice(0, 5)
             .map(r => ({ command: r.command, response: r.output }))
 
-        // Send query via persistent WebSocket connection
         try {
-            const ws = wsRef.current
-
-            // Wait for connection if not ready
+            let ws = wsRef.current
             if (!ws || ws.readyState !== WebSocket.OPEN) {
-                // Wait up to 5 seconds for connection
                 let attempts = 0
-                while ((!ws || ws.readyState !== WebSocket.OPEN) && attempts < 50) {
+                while (attempts < 50) {
                     await new Promise(resolve => setTimeout(resolve, 100))
+                    ws = wsRef.current
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        break
+                    }
                     attempts++
                 }
 
+                ws = wsRef.current
                 if (!ws || ws.readyState !== WebSocket.OPEN) {
                     setRuns(prev => prev.map(r => r.id === id ? { 
                         ...r, 
                         status: "error", 
-                        output: "WebSocket not connected. Please wait a moment and try again." 
+                        output: "WebSocket not connected. Please wait a moment and try again. Make sure the WebSocket server is running on ws://localhost:8080" 
                     } : r))
                     return
                 }
             }
 
-            // Create promise for this query
             const queryPromise = new Promise<any>((resolve, reject) => {
                 pendingQueriesRef.current.set(id, { resolve, reject })
 
-                // Timeout after 60 seconds
                 setTimeout(() => {
                     if (pendingQueriesRef.current.has(id)) {
                         pendingQueriesRef.current.delete(id)
@@ -239,7 +292,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                 }, 60000)
             })
 
-            // Send query message
             const message = {
                 queryId: id,
                 message: cmd,
@@ -253,19 +305,16 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             }
             ws.send(JSON.stringify(message))
 
-            // Handle response
             try {
                 const response = await queryPromise
                 
                 if (response.success && response.type === "query") {
-                    // Success - update run with response
                     setRuns(prev => prev.map(r => r.id === id ? { 
                         ...r, 
                         status: "success", 
                         output: response.response || "No response received" 
                     } : r))
                 } else if (response.error) {
-                    // Error - update run with error
                     setRuns(prev => prev.map(r => r.id === id ? { 
                         ...r, 
                         status: "error", 
@@ -275,7 +324,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                         setHasApiKey(false)
                     }
                 } else {
-                    // Unknown response format
                     setRuns(prev => prev.map(r => r.id === id ? { 
                         ...r, 
                         status: "error", 
@@ -297,7 +345,11 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                 output: `Failed to send query: ${error instanceof Error ? error.message : String(error)}` 
             } : r))
         }
-    }
+    }, [actualApiKey, runs])
+    
+    React.useEffect(() => {
+        enqueueRef.current = enqueue
+    }, [enqueue])
 
     const onSubmit = (e: React.FormEvent) => {
         e.preventDefault()
@@ -322,7 +374,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
 
     return (
         <div className="h-full w-full flex flex-col bg-background dark:bg-[#282c34] overflow-hidden border-l border-border/50 dark:border-[#4a5568]">
-                {/* Command Input Section */}
                 <div className="px-3 md:px-5 py-2.5 md:py-3.5 border-b border-border/50 dark:border-[#4a5568] dark:bg-[#282c34]">
                     <form onSubmit={onSubmit} className="space-y-2 md:space-y-3">
                         <div className="relative group">
@@ -346,10 +397,8 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                             </button>
                         </div>
                     
-                    {/* Quick Actions & Prompts Section */}
                     {hasApiKey && (
                         <div className="flex flex-col gap-2.5">
-                            {/* General Prompts - Inspiration & Daily Boost */}
                             <div className="flex flex-col gap-1.5">
                                 <div className="flex items-center gap-1.5">
                                     <SparklesIcon className="h-3 w-3 text-muted-foreground/70 dark:text-[#9cdcfe]" />
@@ -376,7 +425,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                                 </div>
                             </div>
                             
-                            {/* Knowledge Base Quick Actions - Your Notes */}
                             <div className="flex flex-col gap-1.5">
                                 <div className="flex items-center gap-1.5">
                                     <BookOpenIcon className="h-3 w-3 text-muted-foreground/70 dark:text-[#9cdcfe]" />
@@ -415,9 +463,7 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                 </form>
             </div>
 
-            {/* Results Section - Scrollable */}
             <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-                {/* Results Header with Clear Button */}
                 {runs.length > 0 && (
                     <div className="flex items-center justify-between px-3 md:px-5 py-2 border-b border-border/40 dark:border-[#4a5568]/50">
                         <span className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe] font-medium">
@@ -514,17 +560,17 @@ function RunCard({ run, onCopy, copied }: { run: Run, onCopy: () => void, copied
                         </div>
                     </div>
                 ) : run.status === "error" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <pre className="whitespace-pre-wrap font-sans text-[10px] md:text-xs leading-relaxed text-red-600 dark:text-red-400 bg-transparent p-0 m-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                            {run.output}
-                        </pre>
-                    </div>
+                    <div className="font-sans text-[10px] md:text-xs leading-relaxed text-red-600 dark:text-red-400 bg-transparent p-0 m-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-2 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_p]:mb-2 [&_p]:leading-relaxed [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-2 [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-2 [&_li]:mb-1 [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_pre]:bg-muted [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:mb-2">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {run.output}
+                            </ReactMarkdown>
+                        </div>
                 ) : (
-                    <div className="prose prose-sm dark:prose-invert max-w-none">
-                        <pre className="whitespace-pre-wrap font-sans text-[10px] md:text-xs leading-relaxed text-foreground/90 dark:text-[#d4d4d4] bg-transparent p-0 m-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                            {run.output}
-                        </pre>
-                    </div>
+                    <div className="font-sans text-[10px] md:text-xs leading-relaxed text-foreground/90 dark:text-[#d4d4d4] bg-transparent p-0 m-0 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [&_h1]:text-lg [&_h1]:font-bold [&_h1]:mt-4 [&_h1]:mb-2 [&_h1]:text-foreground dark:[&_h1]:text-[#d4d4d4] [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-2 [&_h2]:text-foreground dark:[&_h2]:text-[#d4d4d4] [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_h3]:text-foreground dark:[&_h3]:text-[#d4d4d4] [&_p]:mb-2 [&_p]:leading-relaxed [&_p]:text-foreground/90 dark:[&_p]:text-[#d4d4d4] [&_strong]:font-semibold [&_strong]:text-foreground dark:[&_strong]:text-[#d4d4d4] [&_em]:italic [&_ul]:list-disc [&_ul]:ml-4 [&_ul]:mb-2 [&_ul]:text-foreground/90 dark:[&_ul]:text-[#d4d4d4] [&_ol]:list-decimal [&_ol]:ml-4 [&_ol]:mb-2 [&_ol]:text-foreground/90 dark:[&_ol]:text-[#d4d4d4] [&_li]:mb-1 [&_li]:text-foreground/90 dark:[&_li]:text-[#d4d4d4] [&_code]:bg-muted/50 dark:[&_code]:bg-[#3e4451]/50 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code]:text-xs [&_code]:font-mono [&_code]:text-foreground/90 dark:[&_code]:text-[#d4d4d4] [&_pre]:bg-muted/50 dark:[&_pre]:bg-[#3e4451]/50 [&_pre]:p-2 [&_pre]:rounded [&_pre]:overflow-x-auto [&_pre]:mb-2 [&_pre]:text-xs [&_blockquote]:border-l-4 [&_blockquote]:border-muted [&_blockquote]:pl-4 [&_blockquote]:italic [&_blockquote]:my-2 [&_a]:text-primary [&_a]:underline [&_a]:hover:text-primary/80">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {run.output}
+                            </ReactMarkdown>
+                        </div>
                 )}
             </div>
         </div>

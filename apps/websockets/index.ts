@@ -10,11 +10,14 @@ interface Message {
     notes?: string;
     folders?: string;
     operationType?: "todo" | "query";
+    queryId?: string;
+    conversationHistory?: Array<{ command: string; response: string }>;
 }
 
 interface Response {
     success: boolean;
     type?: "todo" | "query";
+    queryId?: string;
     command?: string;
     operation?: {
         type: string;
@@ -149,11 +152,13 @@ wss.on("connection", (ws, req) => {
             } else {
                 // Handle AI query operations
                 try {
-                    const res = await queryAgent(data.message, apiKey, model, config, notes, folders);
+                    const conversationHistory = data.conversationHistory || [];
+                    const res = await queryAgent(data.message, apiKey, model, config, notes, folders, conversationHistory);
                     
                     response = {
                         success: true,
                         type: "query",
+                        queryId: data.queryId,
                         response: res,
                     };
 

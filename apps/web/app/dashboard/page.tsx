@@ -5,8 +5,9 @@ import { AppSidebar } from "@/components/app-sidebar"
 import NotesInterface from "@/components/notes/NotesInterface"
 import { SelectedNoteProvider } from "@/components/notes/selected-note-context"
 import BreadcrumbNote from "@/components/notes/BreadcrumbNote"
+import { CommandPalette } from "@/components/CommandPalette"
 import { Separator } from "@/components/ui/separator"
-import { Command, GripVertical, GripHorizontal, Pencil, Key, Eye, EyeOff, X, Check } from "lucide-react"
+import { Command, GripVertical, GripHorizontal, Pencil, Key, Eye, EyeOff, X, Check, Search } from "lucide-react"
 import {
   SidebarInset,
   SidebarProvider,
@@ -36,6 +37,7 @@ export default function Page() {
   const [showApiKey, setShowApiKey] = React.useState<boolean>(false)
   const [showApiKeyInput, setShowApiKeyInput] = React.useState<boolean>(false)
   const [actualApiKey, setActualApiKey] = React.useState<string>("")
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState<boolean>(false)
 
   // Check for API key on mount
   React.useEffect(() => {
@@ -110,6 +112,24 @@ export default function Page() {
     window.addEventListener("resize", checkDesktop)
     return () => window.removeEventListener("resize", checkDesktop)
   }, [])
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setCommandPaletteOpen(prev => !prev)
+      }
+      if (e.key === 'Escape' && commandPaletteOpen) {
+        setCommandPaletteOpen(false)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [commandPaletteOpen])
+
+  const handleAiQuery = (query: string) => {
+    window.dispatchEvent(new CustomEvent("nimble:ai-query", { detail: { prompt: query } }))
+  }
 
   const handleSidebarOpenChange = (open: boolean) => {
     setSidebarOpen(open)
@@ -265,7 +285,21 @@ export default function Page() {
             />
             <BreadcrumbNote />
           </div>
-          <div className="hidden md:flex items-center gap-2 ml-auto px-4">
+          <div className="hidden md:flex items-center gap-3 ml-auto px-4">
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="inline-flex items-center justify-between rounded-md border border-border/40 dark:border-[#4a5568]/60 bg-background/50 dark:bg-[#2c313c]/50 hover:bg-muted/30 dark:hover:bg-[#3e4451]/50 hover:border-border/60 dark:hover:border-[#4a5568] transition-all px-3 py-1.5 w-[150px] h-[32px] group"
+              title="Open command palette (Ctrl+K or Cmd+K)"
+            >
+              <div className="flex items-center gap-3 shrink-0">
+                <Search className="h-3 w-3 text-muted-foreground/60 dark:text-[#9cdcfe]/70 group-hover:text-muted-foreground dark:group-hover:text-[#4fc3f7] transition-colors" />
+                <span className="text-[11px] font-medium text-muted-foreground/70 dark:text-[#9cdcfe]/70 group-hover:text-muted-foreground dark:group-hover:text-[#4fc3f7] transition-colors whitespace-nowrap">Search</span>
+              </div>
+              <kbd className="inline-flex items-center justify-center gap-0.5 px-2.5 py-0.5 text-[10px] font-medium text-muted-foreground/50 dark:text-[#828997]/70 border border-border/30 dark:border-[#4a5568]/40 rounded bg-muted/20 dark:bg-[#3e4451]/30 shrink-0 h-[18px]">
+                <span className="text-[8px] leading-none inline-flex items-center justify-center h-full">⌘</span>
+                <span className="leading-none inline-flex items-center">K</span>
+              </kbd>
+            </button>
             <div className="inline-flex items-center gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/50 dark:bg-[#3e4451] backdrop-blur-sm px-2.5 py-1.5 text-[11px] font-medium text-muted-foreground dark:text-[#4fc3f7]">
               <Command className="h-3.5 w-3.5 dark:text-[#4fc3f7]" />
               <span>AI Agent</span>
@@ -373,6 +407,11 @@ export default function Page() {
           </div>
         </div>
         </SidebarInset>
+        <CommandPalette 
+          open={commandPaletteOpen} 
+          onOpenChange={setCommandPaletteOpen}
+          onAiQuery={handleAiQuery}
+        />
       </SelectedNoteProvider>
     </SidebarProvider>
   )
