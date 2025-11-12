@@ -138,7 +138,7 @@ const reorderFolders = (folderIds: string[]): void => {
 	const reordered = folderIds.map((id, index) => {
 		const folder = folders.find(f => f.id === id);
 		if (!folder) return null;
-		return { ...folder, order: index };
+		return { ...folder, order: index } as Folder;
 	}).filter((f): f is Folder => f !== null);
 	
 	// Add any folders not in the reordered list (shouldn't happen, but safety check)
@@ -157,7 +157,7 @@ const reorderNotes = (noteIds: string[], folderId: string | null): void => {
 	const reordered = noteIds.map((id, index) => {
 		const note = notes.find(n => n.id === id);
 		if (!note) return null;
-		return { ...note, order: index, folderId };
+		return { ...note, order: index, folderId } as Note;
 	}).filter((n): n is Note => n !== null);
 	
 	// Update notes that were moved or reordered
