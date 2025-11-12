@@ -82,7 +82,7 @@ function SortableFolderItem({
     <div 
       ref={setNodeRef} 
       style={style}
-      className={`transition-all duration-200 ${isDragging ? 'z-50' : ''} px-1 ${isFirstItem ? 'pt-0.5' : ''}`}
+      className={`transition-all duration-200 ${isDragging ? 'z-50' : ''} px-1 group-data-[collapsible=icon]:px-0 ${isFirstItem ? 'pt-0.5' : ''}`}
     >
       <Collapsible
         asChild
@@ -144,7 +144,7 @@ function SortableFolderItem({
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span className="ml-2 block overflow-hidden text-ellipsis whitespace-nowrap transition-all group-hover/item:max-w-[calc(100%-5rem)] max-w-full dark:text-[#d4d4d4] dark:group-hover/item:text-[#4fc3f7]">{item.title}</span>
+                <span className="ml-2 group-data-[collapsible=icon]:ml-0 block overflow-hidden text-ellipsis whitespace-nowrap transition-all group-hover/item:max-w-[calc(100%-5rem)] max-w-full dark:text-[#d4d4d4] dark:group-hover/item:text-[#4fc3f7]">{item.title}</span>
               )}
               <div className="pointer-events-none absolute right-8 top-1/2 -translate-y-1/2 flex gap-1 opacity-0 transition-opacity group-hover/item:opacity-100 group-data-[collapsible=icon]:hidden">
                 {typeof id !== 'undefined' && id !== "" && (
