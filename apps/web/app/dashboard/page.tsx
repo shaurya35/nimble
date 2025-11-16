@@ -13,6 +13,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { UserButton } from "@clerk/nextjs"
 
 // API Key management functions
 const getApiKey = (): string => {
@@ -362,6 +363,16 @@ export default function Page() {
                 </div>
               </div>
             )}
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: "h-8 w-8 rounded-lg",
+                  userButtonPopoverCard: "dark:bg-[#282c34] dark:border dark:border-[#4a5568] shadow-lg",
+                  userButtonPopoverActionButton: "dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7] dark:hover:bg-[#3e4451]",
+                  userButtonPopoverActionButtonText: "dark:text-[#9cdcfe]",
+                }
+              }}
+            />
           </div>
         </header>
         <div className="flex flex-1 flex-col md:flex-row p-2 md:p-4 pt-0 md:min-h-0 md:overflow-hidden overflow-hidden">
