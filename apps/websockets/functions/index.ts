@@ -299,25 +299,22 @@ const queryAgent = async (
   conversationHistory?: Array<{ command: string; response: string }>
 ): Promise<string> => {
   try {
-    // Calculate relative dates from the message
     const calculatedDate = calculateRelativeDate(message);
     const dateContext = calculatedDate
       ? `\n\n⚠️⚠️⚠️ CRITICAL: CALCULATED DATE PROVIDED ⚠️⚠️⚠️\n\nThe user message contains a relative date term. The server has calculated the exact date for you.\n\nYOU MUST USE THIS EXACT DATE STRING (do NOT calculate or modify it):\n"${calculatedDate}"\n\nWhen mentioning dates or times in your response, use this calculated date: "${calculatedDate}"\n\nDO NOT use setDate(), Date.now(), or any date calculation. Just use the string "${calculatedDate}" directly.\n\n`
       : "";
 
-    // Get current date/time for context - use server's local timezone for accuracy
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
-    const currentDate = `${year}-${month}-${day}`; // YYYY-MM-DD (server's actual date)
-    const currentTime = now.toISOString(); // Full ISO string
+    const currentDate = `${year}-${month}-${day}`;
+    const currentTime = now.toISOString();
     const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][now.getDay()];
     const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()];
     
     const currentDateContext = `\n\n📅 CURRENT DATE/TIME CONTEXT (SERVER TIME - USE THIS FOR ALL DATE REFERENCES):\n- Today's date: ${currentDate} (${dayOfWeek}, ${monthName} ${now.getDate()}, ${year})\n- Current timestamp: ${currentTime}\n- Day of month: ${now.getDate()}\n- Month: ${monthName} (${month})\n- Year: ${year}\n\n**CRITICAL**: When the user asks about "today", "today's tasks", "today's date", or any reference to the current date, you MUST use: ${currentDate} (${dayOfWeek}, ${monthName} ${now.getDate()}, ${year}). The day of the month is ${now.getDate()}, NOT any other number. Always reference this exact date.\n\n`;
 
-    // Build conversation history context for variety
     const historyContext = conversationHistory && conversationHistory.length > 0
       ? `\n\n## Previous Conversation History (AVOID REPEATING THESE)\n\n**CRITICAL VARIETY REQUIREMENT**: The following are previous queries and responses. You MUST provide COMPLETELY DIFFERENT content than what you've already given. Do NOT repeat any quotes, tips, authors, formats, or responses from below.\n\n${conversationHistory.map((h, idx) => {
           const responsePreview = h.response.length > 300 ? h.response.substring(0, 300) + '...' : h.response;
@@ -325,7 +322,6 @@ const queryAgent = async (
         }).join("\n\n---\n\n")}\n\n**REMEMBER**: This is a NEW, FRESH request. Think creatively and provide unique content that hasn't been given before. Rotate through different authors, themes, formats, and styles completely.`
       : "\n\n## Conversation History\n\nNo previous conversation history. This is a fresh request - provide unique, inspiring content with full variety.\n\n";
 
-    // Parse context data
     let notesData: any[] = [];
     let foldersData: any[] = [];
 
@@ -341,7 +337,6 @@ const queryAgent = async (
       console.warn("Failed to parse folders:", e);
     }
 
-    // Build context summary
     const contextSummary = `
 ## User's Knowledge Base Context
 
@@ -355,32 +350,25 @@ ${foldersData.length > 0
 ${notesData.length > 0
   ? notesData.map((n: any) => {
       const folderName = foldersData.find((f: any) => f.id === n.folderId)?.name || "Uncategorized";
-      // Handle content - could be plain text or JSON string (for rich content)
-      // For AI processing, include FULL content, not just previews
       let fullContent = "(empty)";
       if (n.content) {
         try {
-          // Try to parse as JSON (for rich content format)
           const parsed = JSON.parse(n.content);
           if (Array.isArray(parsed)) {
-            // Rich content format - extract text from blocks
             const textBlocks = parsed.filter((b: any) => b.type === "text" || b.type === "link");
             fullContent = textBlocks.map((b: any) => b.content || b.url || "").join(" ");
           } else {
             fullContent = n.content;
           }
         } catch {
-          // Plain text content - use full content
           fullContent = n.content;
         }
       }
       const tags = n.tags && n.tags.length > 0 ? ` [Tags: ${n.tags.join(", ")}]` : "";
       
-      // Extract structured information from content for better AI parsing
       const extractStructuredInfo = (content: string): string => {
         const info: string[] = [];
         
-        // Extract phases (Phase 1, Phase 2, etc.)
         const phaseMatches = content.match(/Phase\s+(\d+)\s*-\s*([^(]+)\s*\(([^)]+)\)/gi);
         if (phaseMatches && phaseMatches.length > 0) {
           info.push(`**EXTRACTED PHASES (${phaseMatches.length} total):**`);
@@ -392,21 +380,18 @@ ${notesData.length > 0
           });
         }
         
-        // Extract team information
         const teamMatch = content.match(/Team\s+size:\s*([^.]+)/i);
         if (teamMatch && teamMatch[1]) {
           info.push(`**EXTRACTED TEAM COMPOSITION:**`);
           info.push(`  - ${teamMatch[1].trim()}`);
         }
         
-        // Extract budget
         const budgetMatch = content.match(/Budget:\s*(\$[\d,]+[^.]*)/i);
         if (budgetMatch && budgetMatch[1]) {
           info.push(`**EXTRACTED BUDGET:**`);
           info.push(`  - ${budgetMatch[1].trim()}`);
         }
         
-        // Extract success metrics
         const metricsMatch = content.match(/Success\s+metrics?:\s*([^.]+)/i);
         if (metricsMatch && metricsMatch[1]) {
           info.push(`**EXTRACTED SUCCESS METRICS:**`);
@@ -418,7 +403,6 @@ ${notesData.length > 0
       
       const structuredInfo = extractStructuredInfo(fullContent);
       
-      // Format content with clear markers to ensure AI reads to the end
       return `- **${n.title || "Untitled"}** (ID: ${n.id})
   - Folder: ${folderName}${tags}${structuredInfo}
   - Full Content (READ COMPLETELY - ALL TEXT BELOW IS IMPORTANT):

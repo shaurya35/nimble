@@ -73,7 +73,6 @@ wss.on("connection", (ws, req) => {
             const folders = data.folders || "";
             const operationType = data.operationType;
 
-            // Determine operation type
             const isTodoOperation = operationType === "todo" || (
                 operationType !== "query" && 
                 todos && 
@@ -93,7 +92,6 @@ wss.on("connection", (ws, req) => {
             let response: Response;
 
             if (isTodoOperation) {
-                // Handle todo operations
                 const res = await convertor(data.message, apiKey, model, config, todos);
 
                 let operation: any;
@@ -150,7 +148,6 @@ wss.on("connection", (ws, req) => {
                 ws.send(JSON.stringify(response));
                 console.log(`Response Sent- Client ${operation.type} (todo operation)`);
             } else {
-                // Handle AI query operations
                 try {
                     const conversationHistory = data.conversationHistory || [];
                     const res = await queryAgent(data.message, apiKey, model, config, notes, folders, conversationHistory);

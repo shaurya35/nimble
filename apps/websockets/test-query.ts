@@ -1,6 +1,5 @@
 import WebSocket from "ws";
 
-// Sample big data - realistic folders and notes with extensive content
 const sampleFolders = [
   {
     id: "folder-1",
@@ -229,7 +228,6 @@ const sampleNotes = [
   }
 ];
 
-// Test queries - different types of tasks
 const testQueries = [
   {
     name: "Find Query",
@@ -279,10 +277,10 @@ async function testQuery(queryIndex: number = 0) {
     
     const message = {
       message: test.message,
-      apiKey: "", // Replace with actual API key
-      model: "gemini-1.5-flash", // Best balance: good extraction + low cost (~$0.50-1.00 per 1M input tokens)
+      apiKey: "",
+      model: "gemini-1.5-flash",
       config: {
-        temperature: 0.3, // Lower temperature for more focused, deterministic extraction
+        temperature: 0.3,
         maxTokens: 4000
       },
       operationType: "query",
@@ -330,14 +328,12 @@ async function testQuery(queryIndex: number = 0) {
 
   ws.on("close", () => {
     console.log("\n🔌 Connection closed");
-    // Wait a bit before next test
     setTimeout(() => {
       testQuery(queryIndex + 1);
     }, 2000);
   });
 }
 
-// Run all tests
 console.log("🚀 Starting comprehensive AI Agent tests...");
 console.log(`Total notes: ${sampleNotes.length}`);
 console.log(`Total folders: ${sampleFolders.length}`);

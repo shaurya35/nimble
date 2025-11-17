@@ -7,7 +7,7 @@ import { SelectedNoteProvider } from "@/components/notes/selected-note-context"
 import BreadcrumbNote from "@/components/notes/BreadcrumbNote"
 import { CommandPalette } from "@/components/CommandPalette"
 import { Separator } from "@/components/ui/separator"
-import { Command, GripVertical, GripHorizontal, Pencil, Key, Eye, EyeOff, X, Check, Search } from "lucide-react"
+import { Command, GripVertical, GripHorizontal, Pencil, Key, Eye, EyeOff, X, Search } from "lucide-react"
 import {
   SidebarInset,
   SidebarProvider,
@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/sidebar"
 import { UserButton } from "@clerk/nextjs"
 
-// API Key management functions
 const getApiKey = (): string => {
   if (typeof window === "undefined") return ""
   const stored = localStorage.getItem("gemini_api_key")
@@ -32,7 +31,6 @@ export default function Page() {
   const [isResizingMobile, setIsResizingMobile] = React.useState(false)
   const [isDesktop, setIsDesktop] = React.useState(false)
   
-  // API Key state
   const [hasApiKey, setHasApiKey] = React.useState<boolean>(false)
   const [apiKey, setApiKey] = React.useState<string>("")
   const [showApiKey, setShowApiKey] = React.useState<boolean>(false)
@@ -40,7 +38,6 @@ export default function Page() {
   const [actualApiKey, setActualApiKey] = React.useState<string>("")
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState<boolean>(false)
 
-  // Check for API key on mount
   React.useEffect(() => {
     const checkApiKey = () => {
       const key = getApiKey()
@@ -57,7 +54,6 @@ export default function Page() {
     checkApiKey()
   }, [])
 
-  // Save API key to localStorage
   const handleApiKeyChange = (value: string) => {
     setActualApiKey(value)
     if (value.trim()) {
@@ -76,7 +72,6 @@ export default function Page() {
     }
   }
 
-  // Toggle show/hide API key
   const toggleShowApiKey = () => {
     setShowApiKey(!showApiKey)
     if (!showApiKey) {
@@ -414,7 +409,7 @@ export default function Page() {
               height: isDesktop ? 'auto' : `${100 - notepadHeight}%`
             }}
           >
-            <AgentInterface apiKey={actualApiKey} hasApiKey={hasApiKey} />
+            <AgentInterface apiKey={actualApiKey} hasApiKey={hasApiKey} onApiKeyChange={handleApiKeyChange} />
           </div>
         </div>
         </SidebarInset>

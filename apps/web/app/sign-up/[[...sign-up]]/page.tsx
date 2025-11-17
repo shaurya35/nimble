@@ -5,9 +5,7 @@ export default async function SignUpPage({
 }: {
   searchParams: Promise<{ redirect_url?: string }>
 }) {
-  // Await searchParams as it's now a Promise in Next.js 15+
   const params = await searchParams
-  // Decode the redirect_url if it exists, otherwise default to /dashboard
   const redirectUrl = params.redirect_url 
     ? decodeURIComponent(params.redirect_url)
     : '/dashboard'

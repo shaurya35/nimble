@@ -23,7 +23,6 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-// Sortable Folder Item Component
 function SortableFolderItem({
   id,
   item,
@@ -233,7 +232,6 @@ function SortableFolderItem({
   );
 }
 
-// Sortable Note Item Component
 function SortableNoteItem({
   id,
   title,
@@ -309,7 +307,6 @@ function SortableNoteItem({
   );
 }
 
-// Sortable Notes List Component
 function SortableNotesList({
   folderId,
   notes,
@@ -475,13 +472,12 @@ export function NavMain({
   const [hoveredFolderId, setHoveredFolderId] = React.useState<string | null>(null);
   const OPEN_KEY = "folderOpenState";
   
-  // Ensure editMode has a default value
   const isEditMode = editMode ?? false;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8, // Require 8px of movement before activating drag
+        distance: 8,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -560,12 +556,10 @@ export function NavMain({
     const { active } = event;
     const id = String(active.id).replace(/^(folder|note)-/, '');
     
-    // Find the item being dragged
     if (String(active.id).startsWith('folder-')) {
       const folder = items.find((item: any) => String(item.id) === id);
       if (folder) {
         setDraggedItem({ id, title: folder.title, type: 'folder' });
-        // Save current open states and collapse all folders when dragging folders
         setSavedOpenStates({ ...openById });
         const allClosed: Record<string, boolean> = {};
         items.forEach((item: any) => {
@@ -575,7 +569,6 @@ export function NavMain({
         setOpenById(allClosed);
       }
     } else if (String(active.id).startsWith('note-')) {
-      // Find note in any folder
       for (const item of items) {
         const note = item.items?.find((n: any) => String(n.id) === id);
         if (note) {
@@ -603,23 +596,19 @@ export function NavMain({
     const activeIdStr = String(active.id);
     const overId = String(over.id);
 
-    // If dragging a note over a folder, expand that folder
     if (activeIdStr.startsWith('note-') && overId.startsWith('folder-')) {
       const targetFolderId = overId.replace('folder-', '');
       const folderId = targetFolderId === "" ? "" : targetFolderId;
       
       if (hoveredFolderId !== folderId) {
-        // Clear any pending timeout
         if (expandTimeoutRef.current) {
           clearTimeout(expandTimeoutRef.current);
         }
         
         setHoveredFolderId(folderId);
         
-        // Auto-expand the folder being hovered over with a slight delay for smooth UX
         expandTimeoutRef.current = setTimeout(() => {
           setOpenById((prev) => {
-            // Only expand if folder is closed
             if (!prev[folderId]) {
               const next = { ...prev, [folderId]: true };
               writeOpenMap(next);
@@ -628,17 +617,15 @@ export function NavMain({
             return prev;
           });
           expandTimeoutRef.current = null;
-        }, 200); // Small delay for better UX
+        }, 200);
       }
     } else if (activeIdStr.startsWith('note-') && overId.startsWith('note-')) {
-      // If dragging over a note, find its parent folder and expand it
       const targetNoteId = overId.replace('note-', '');
       for (const item of items) {
         const note = item.items?.find((n: any) => String(n.id) === targetNoteId);
         if (note) {
           const folderId = item.id === "" ? "" : String(item.id);
           if (hoveredFolderId !== folderId && !openById[folderId]) {
-            // Clear any pending timeout
             if (expandTimeoutRef.current) {
               clearTimeout(expandTimeoutRef.current);
             }
@@ -672,14 +659,12 @@ export function NavMain({
     const { active, over } = event;
     const wasDraggingFolder = String(active.id).startsWith('folder-');
     
-    // Restore folder open states if we were dragging a folder
     if (wasDraggingFolder && savedOpenStates) {
       setOpenById(savedOpenStates);
       writeOpenMap(savedOpenStates);
       setSavedOpenStates(null);
     }
     
-    // Clean up hover state and timeouts
     if (expandTimeoutRef.current) {
       clearTimeout(expandTimeoutRef.current);
       expandTimeoutRef.current = null;
@@ -688,13 +673,11 @@ export function NavMain({
     setActiveId(null);
     setDraggedItem(null);
 
-    // If drag was cancelled (no drop target), don't process
     if (!over || !isEditMode) return;
 
     const activeId = String(active.id);
     const overId = String(over.id);
 
-    // Handle folder reordering
     if (activeId.startsWith('folder-') && overId.startsWith('folder-')) {
       const activeFolderId = activeId.replace('folder-', '');
       const overFolderId = overId.replace('folder-', '');
@@ -708,12 +691,10 @@ export function NavMain({
         onReorderFolders?.(reordered);
       }
     }
-    // Handle note reordering within same folder or moving between folders
     else if (activeId.startsWith('note-') && overId.startsWith('note-')) {
       const noteId = activeId.replace('note-', '');
       const targetNoteId = overId.replace('note-', '');
       
-      // Find source and target folders
       let sourceFolderId: string | null = null;
       let targetFolderId: string | null = null;
       
@@ -726,7 +707,6 @@ export function NavMain({
       }
       
       if (sourceFolderId === targetFolderId) {
-        // Reordering within same folder
         const folder = items.find((item: any) => (item.id === "" ? null : String(item.id)) === sourceFolderId);
         if (folder?.items) {
           const noteIds = folder.items.map((n: any) => String(n.id));
@@ -739,11 +719,9 @@ export function NavMain({
           }
         }
       } else {
-        // Moving note to different folder
         onMoveNote?.(noteId, targetFolderId);
       }
     }
-    // Handle moving note to folder (dropping note on folder)
     else if (activeId.startsWith('note-') && overId.startsWith('folder-')) {
       const noteId = activeId.replace('note-', '');
       const targetFolderId = overId.replace('folder-', '');

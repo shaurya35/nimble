@@ -40,7 +40,6 @@ const getFolders = (): Folder[] => {
 		return [];
 	}
 	const folders = safeParse<Folder[]>(localStorage.getItem(FOLDERS_KEY), []);
-	// Sort by order field if present, otherwise maintain array order (backward compatible)
 	return folders.sort((a, b) => {
 		const orderA = a.order ?? Infinity;
 		const orderB = b.order ?? Infinity;
@@ -63,7 +62,6 @@ const getNotes = (): Note[] => {
 		return [];
 	}
 	const notes = safeParse<Note[]>(localStorage.getItem(NOTES_KEY), []);
-	// Sort by order field if present, otherwise maintain array order (backward compatible)
 	return notes.sort((a, b) => {
 		const orderA = a.order ?? Infinity;
 		const orderB = b.order ?? Infinity;
@@ -141,7 +139,6 @@ const reorderFolders = (folderIds: string[]): void => {
 		return { ...folder, order: index } as Folder;
 	}).filter((f): f is Folder => f !== null);
 	
-	// Add any folders not in the reordered list (shouldn't happen, but safety check)
 	const existingIds = new Set(folderIds);
 	folders.forEach(folder => {
 		if (!existingIds.has(folder.id)) {
@@ -160,15 +157,12 @@ const reorderNotes = (noteIds: string[], folderId: string | null): void => {
 		return { ...note, order: index, folderId } as Note;
 	}).filter((n): n is Note => n !== null);
 	
-	// Update notes that were moved or reordered
 	reordered.forEach(note => {
 		upsertNote(note);
 	});
 	
-	// Update order for notes that weren't in the reordered list but are in the same folder
 	notes.forEach(note => {
 		if (note.folderId === folderId && !noteIds.includes(note.id)) {
-			// Keep existing order or assign a high order
 			if (note.order === undefined) {
 				upsertNote({ ...note, order: 9999 });
 			}

@@ -112,7 +112,6 @@ import {
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { getFolders, getNotes, setFolders, setNotes, deleteFolder, deleteNote, updateFolder, reorderFolders, reorderNotes, moveNoteToFolder } from "@/services/localstorage"
-// custom sidebar preloader
 function SidebarLoader(){
   return (
     <div className="py-4 flex items-center justify-center">
@@ -133,16 +132,6 @@ const dummy = {
       logo: GalleryVerticalEnd,
       plan: "AI Notetaker",
     },
-    // {
-    //   name: "Acme Corp.",
-    //   logo: AudioWaveform,
-    //   plan: "Startup",
-    // },
-    // {
-    //   name: "Evil Corp.",
-    //   logo: Command,
-    //   plan: "Free",
-    // },
   ],
   navMain: [
     {

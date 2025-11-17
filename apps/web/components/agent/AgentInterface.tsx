@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Play, Loader2, Clipboard, Check, Sparkles, Wand2, ListTodo, NotebookPen, Trash2, Zap, Command, Bot, Eye, EyeOff, Key, Pencil, X, Sunrise, Lightbulb, Target, BookOpen, Coffee, TrendingUp, Brain, Rocket, Search, BarChart3, Link2, FileText, GitBranch, Sparkles as SparklesIcon, BookOpen as BookOpenIcon, RefreshCw, CheckSquare, KeyRound } from "lucide-react"
+import { Play, Loader2, Clipboard, Check, Sparkles, Wand2, ListTodo, NotebookPen, Trash2, Zap, Command, Bot, Eye, EyeOff, Key, Pencil, X, Sunrise, Lightbulb, Target, BookOpen, Coffee, TrendingUp, Brain, Rocket, Search, BarChart3, Link2, FileText, GitBranch, Sparkles as SparklesIcon, BookOpen as BookOpenIcon, RefreshCw, CheckSquare, KeyRound, ShieldCheck, ExternalLink } from "lucide-react"
 import { useSelectedNote } from "@/components/notes/selected-note-context"
 import { getNotes, getFolders } from "@/services/localstorage"
 import ReactMarkdown from "react-markdown"
@@ -18,11 +18,16 @@ type Run = {
 }
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080"
+const API_KEY_DOC_URL = "https://aistudio.google.com/app/apikey"
 
 const getApiKey = (): string => {
     if (typeof window === "undefined") return ""
-    const stored = localStorage.getItem("gemini_api_key")
-    if (stored) return stored
+    try {
+        const stored = window.localStorage?.getItem("gemini_api_key")
+        if (stored) return stored
+    } catch (error) {
+        console.warn("Unable to read API key from localStorage", error)
+    }
     return process.env.NEXT_PUBLIC_GEMINI_API_KEY || ""
 }
 
@@ -39,7 +44,13 @@ function useSelectedNoteData(){
     return note
 }
 
-export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: propHasApiKey = false }: { apiKey?: string, hasApiKey?: boolean } = {}){
+type AgentInterfaceProps = {
+    apiKey?: string
+    hasApiKey?: boolean
+    onApiKeyChange?: (value: string) => void
+}
+
+export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: propHasApiKey = false, onApiKeyChange }: AgentInterfaceProps = {}){
     const note = useSelectedNoteData()
     const [command, setCommand] = React.useState("")
     const [runs, setRuns] = React.useState<Run[]>([])
@@ -51,6 +62,12 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
     const isConnectingRef = React.useRef<boolean>(false)
     const shouldReconnectRef = React.useRef<boolean>(true)
     const apiKeyRef = React.useRef<string>("")
+    const scrollContainerRef = React.useRef<HTMLDivElement | null>(null)
+    const scrollAnimationRef = React.useRef<number | null>(null)
+    const [inlineKey, setInlineKey] = React.useState<string>("")
+    const [inlineShowKey, setInlineShowKey] = React.useState<boolean>(false)
+    const [inlineStatus, setInlineStatus] = React.useState<"idle" | "saving" | "saved" | "error">("idle")
+    const [inlineError, setInlineError] = React.useState<string>("")
     
     const actualApiKey = React.useMemo(() => {
         const key = propApiKey || getApiKey()
@@ -58,7 +75,7 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             apiKeyRef.current = key
         }
         return key
-    }, [propApiKey])
+    }, [propApiKey, hasApiKey])
 
     const promptSuggestions = [
         { icon: Sunrise, text: "Morning boost", prompt: "Give me a motivational quote to start my day", isGeneral: true },
@@ -75,6 +92,13 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
     React.useEffect(() => {
         setHasApiKey(propHasApiKey)
     }, [propHasApiKey])
+
+    React.useEffect(() => {
+        setInlineKey("")
+        setInlineError("")
+        setInlineStatus("idle")
+        setInlineShowKey(false)
+    }, [hasApiKey])
 
     const enqueueRef = React.useRef<(cmd: string) => Promise<void>>(async () => {})
     
@@ -94,7 +118,8 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
 
     React.useEffect(() => {
         let mounted = true
-        
+        shouldReconnectRef.current = true
+
         const connectWebSocket = () => {
             if (!mounted) {
                 return
@@ -187,6 +212,17 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             }
         }
 
+        if (!actualApiKey) {
+            if (wsRef.current) {
+                wsRef.current.close(1000, "API key removed")
+                wsRef.current = null
+            }
+            pendingQueriesRef.current.clear()
+            return () => {
+                mounted = false
+            }
+        }
+
         const connectTimeout = setTimeout(() => {
             if (mounted) {
                 connectWebSocket()
@@ -209,7 +245,7 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             }
             pendingQueriesRef.current.clear()
         }
-    }, [])
+    }, [actualApiKey])
 
     const enqueue = React.useCallback(async (cmd: string) => {
         const apiKey = actualApiKey || getApiKey()
@@ -238,16 +274,13 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                                 cmd.toLowerCase().includes("learning insight") ||
                                 cmd.toLowerCase().includes("tip"))
 
-        // Get notes and folders from localStorage (only for knowledge base queries)
         const notes = isGeneralQuery ? [] : getNotes()
         const folders = isGeneralQuery ? [] : getFolders()
 
-        // Use higher temperature for general queries (more creative/varied) vs knowledge base queries (more deterministic)
         const config = isGeneralQuery 
-            ? { temperature: 0.9, maxTokens: 4000 } // Higher temperature for varied, creative responses
-            : DEFAULT_CONFIG // Lower temperature for accurate knowledge base queries
+            ? { temperature: 0.9, maxTokens: 4000 }
+            : DEFAULT_CONFIG
 
-        // Get conversation history (last 5 successful general queries for variety)
         const recentGeneralQueries = runs
             .filter(r => {
                 if (r.status !== "success") return false
@@ -351,6 +384,87 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
         enqueueRef.current = enqueue
     }, [enqueue])
 
+    const scrollToTop = React.useCallback((opts?: { immediate?: boolean }) => {
+        const el = scrollContainerRef.current
+        if (!el) return
+        if (scrollAnimationRef.current) {
+            cancelAnimationFrame(scrollAnimationRef.current)
+            scrollAnimationRef.current = null
+        }
+        if (opts?.immediate) {
+            el.scrollTop = 0
+            return
+        }
+
+        const start = el.scrollTop
+        const duration = 420
+        const easeOutQuint = (t: number) => 1 - Math.pow(1 - t, 5)
+        let startTime: number | null = null
+
+        const step = (timestamp: number) => {
+            if (startTime === null) startTime = timestamp
+            const elapsed = timestamp - startTime
+            const progress = Math.min(elapsed / duration, 1)
+            const eased = easeOutQuint(progress)
+            el.scrollTop = start * (1 - eased)
+            if (progress < 1) {
+                scrollAnimationRef.current = requestAnimationFrame(step)
+            } else {
+                scrollAnimationRef.current = null
+            }
+        }
+
+        scrollAnimationRef.current = requestAnimationFrame(step)
+    }, [])
+
+    React.useEffect(() => {
+        return () => {
+            if (scrollAnimationRef.current) {
+                cancelAnimationFrame(scrollAnimationRef.current)
+            }
+        }
+    }, [])
+
+    const persistKeyLocally = React.useCallback((value: string): boolean => {
+        const trimmed = value.trim()
+        if (!trimmed || typeof window === "undefined") return false
+        try {
+            window.localStorage?.setItem("gemini_api_key", trimmed)
+        } catch (error) {
+            console.warn("Unable to persist API key to localStorage", error)
+            setHasApiKey(false)
+            return false
+        }
+        setHasApiKey(true)
+        return true
+    }, [])
+
+    const handleInlineKeySubmit = () => {
+        const trimmed = inlineKey.trim()
+        if (!trimmed) {
+            setInlineStatus("error")
+            setInlineError("Enter your Gemini API key to continue.")
+            return
+        }
+        setInlineStatus("saving")
+        setInlineError("")
+        const success = onApiKeyChange
+            ? (() => {
+                onApiKeyChange(trimmed)
+                return true
+            })()
+            : persistKeyLocally(trimmed)
+
+        if (!success) {
+            setInlineStatus("error")
+            setInlineError("We couldn't store the key in this browser. Check storage permissions and try again.")
+            return
+        }
+        setInlineStatus("saved")
+        setHasApiKey(true)
+        setInlineKey("")
+    }
+
     const onSubmit = (e: React.FormEvent) => {
         e.preventDefault()
         if (!command.trim()) return
@@ -365,8 +479,14 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
             return
         }
         enqueue(command.trim())
+        scrollToTop()
         setCommand("")
     }
+
+    React.useEffect(() => {
+        if (runs.length === 0) return
+        scrollToTop({ immediate: runs.length <= 1 })
+    }, [runs, scrollToTop])
 
     const copyOutput = async (id: string, text: string) => {
         try{ await navigator.clipboard.writeText(text); setCopiedId(id); setTimeout(()=>setCopiedId(null), 1000) } catch {}
@@ -413,6 +533,7 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                                                 type="button"
                                                 onClick={() => {
                                                     enqueue(suggestion.prompt)
+                                                    scrollToTop()
                                                 }}
                                                 className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/50 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4fc3f7] active:scale-95 dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]"
                                                 title={suggestion.prompt}
@@ -439,6 +560,7 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                                                 type="button"
                                                 onClick={() => {
                                                     enqueue(action.prompt)
+                                                    scrollToTop()
                                                 }}
                                                 className="inline-flex items-center gap-1 md:gap-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/50 dark:bg-[#3e4451] px-1.5 md:px-2 py-0.5 md:py-1 text-[10px] md:text-[11px] font-medium transition-all hover:bg-secondary dark:hover:bg-[#4a5568] hover:border-border dark:hover:border-[#4fc3f7] active:scale-95 dark:text-[#9cdcfe] dark:hover:text-[#4fc3f7]"
                                                 title={action.prompt}
@@ -453,11 +575,84 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                         </div>
                     )}
                     {!hasApiKey && (
-                        <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-secondary/30 dark:bg-[#3e4451]/50">
-                            <KeyRound className="h-3.5 w-3.5 text-muted-foreground/70 dark:text-[#9cdcfe] shrink-0" />
-                            <p className="text-[10px] md:text-[11px] text-muted-foreground/70 dark:text-[#9cdcfe]">
-                                Set your API key in the header to unlock AI-powered insights
-                            </p>
+                        <div className="rounded-md border border-border/60 dark:border-[#3a3f4b] bg-secondary/30 dark:bg-[#252a33] px-3 py-3 md:px-4 md:py-4 space-y-2.5">
+                            <div className="flex items-start gap-2">
+                                <KeyRound className="h-4 w-4 text-muted-foreground/80 dark:text-[#9cdcfe]" />
+                                <div>
+                                    <p className="text-[11px] font-medium text-foreground/90 dark:text-[#d4d4d4]">Bring your own Gemini key</p>
+                                    <p className="text-[11px] leading-relaxed text-muted-foreground/90 dark:text-[#b5c6f1]">
+                                        Your key never leaves this browser, it stays in your  local-storage.
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="space-y-2">
+                                <div className="relative">
+                                    <Key className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/60 dark:text-[#828997]" />
+                                    <input
+                                        type={inlineShowKey ? "text" : "password"}
+                                        value={inlineKey}
+                                        onChange={(e) => {
+                                            setInlineKey(e.target.value)
+                                            if (inlineStatus === "error") {
+                                                setInlineStatus("idle")
+                                                setInlineError("")
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === "Enter") {
+                                                e.preventDefault()
+                                                handleInlineKeySubmit()
+                                            }
+                                        }}
+                                        placeholder="Enter your Gemini API key"
+                                        autoComplete="off"
+                                        className="w-full pl-9 pr-20 py-1.5 rounded-md border border-border/60 dark:border-[#4a5568] bg-background/80 dark:bg-[#2c313c] text-[11px] placeholder:text-muted-foreground/60 dark:placeholder:text-[#828997] dark:text-[#d4d4d4] focus:outline-none focus:ring-2 focus:ring-primary/30 dark:focus:ring-[#4fc3f7]/40 focus:border-primary/50 dark:focus:border-[#4fc3f7] transition-all"
+                                    />
+                                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={() => setInlineShowKey((prev) => !prev)}
+                                            className="p-1 rounded-md text-muted-foreground/60 dark:text-[#828997] hover:text-foreground dark:hover:text-[#4fc3f7] hover:bg-muted/30 dark:hover:bg-[#3e4451]/50 transition-colors"
+                                            aria-label={inlineShowKey ? "Hide key" : "Show key"}
+                                        >
+                                            {inlineShowKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                        </button>
+                                    </div>
+                                </div>
+                                {inlineError && (
+                                    <p className="text-[10px] text-red-500 dark:text-red-300">{inlineError}</p>
+                                )}
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        disabled={inlineStatus === "saving"}
+                                        onClick={handleInlineKeySubmit}
+                                        className="inline-flex items-center gap-1.5 rounded-md bg-primary text-primary-foreground px-3 py-1.5 text-[11px] font-medium shadow-sm hover:bg-primary/90 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                        {inlineStatus === "saving" ? (
+                                            <>
+                                                <Loader2 className="h-3 w-3 animate-spin" />
+                                                <span>Saving</span>
+                                            </>
+                                        ) : (
+                                            <span>{inlineStatus === "saved" ? "Connected" : "Save & connect"}</span>
+                                        )}
+                                    </button>
+                                    <a
+                                        href={API_KEY_DOC_URL}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center gap-1 rounded-md border border-border/50 dark:border-[#4a5568] px-2.5 py-1 text-[10px] text-muted-foreground/80 dark:text-[#9cdcfe]/80 hover:border-border dark:hover:border-[#4fc3f7] transition-colors"
+                                    >
+                                        Get a key
+                                        <ExternalLink className="h-3 w-3" />
+                                    </a>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground/80 dark:text-[#9cdcfe]/80">
+                                <ShieldCheck className="h-3 w-3 text-emerald-500/80 dark:text-emerald-300" />
+                                <span>Stored locally, never on our servers.</span>
+                            </div>
                         </div>
                     )}
                 </form>
@@ -480,12 +675,15 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
                         </button>
                     </div>
                 )}
-                <div className="flex-1 min-h-0 overflow-y-auto px-3 md:px-5 py-3 md:py-4 space-y-2 md:space-y-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                <div
+                    ref={scrollContainerRef}
+                    className="flex-1 min-h-0 overflow-y-auto px-3 md:px-5 py-3 md:py-4 space-y-2 md:space-y-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+                >
                 {runs.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-center py-16 px-4">
                         <div className="relative mb-5">
                             <div className="absolute inset-0 bg-primary/10 blur-2xl rounded-full" />
-                            <div className="relative inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-muted/60 to-muted/40 border border-border/40">
+                            <div className="relative inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-linear-to-br from-muted/60 to-muted/40 border border-border/40">
                                 <Bot className="h-10 w-10 text-muted-foreground/60" />
                             </div>
                         </div>
@@ -511,7 +709,6 @@ export default function AgentInterface({ apiKey: propApiKey = "", hasApiKey: pro
 function RunCard({ run, onCopy, copied }: { run: Run, onCopy: () => void, copied: boolean }){
     return (
         <div className="group/run rounded-lg border border-border/60 dark:border-[#4a5568] bg-card dark:bg-[#2c313c] transition-all hover:border-border/80 dark:hover:border-[#4fc3f7]/50">
-            {/* Header */}
             <div className="flex items-center justify-between px-2.5 md:px-3.5 py-2 md:py-2.5 border-b border-border/40 dark:border-[#4a5568] dark:bg-[#3e4451]/20 gap-2">
                 <div className="flex items-center gap-1.5 md:gap-2 flex-1 min-w-0">
                     <div className="inline-flex items-center rounded-md bg-secondary/30 dark:bg-[#3e4451] border border-border/50 dark:border-[#4a5568] px-1.5 md:px-2 py-0.5 md:py-1 min-w-0">
@@ -550,11 +747,10 @@ function RunCard({ run, onCopy, copied }: { run: Run, onCopy: () => void, copied
                 )}
             </div>
             
-            {/* Content */}
             <div className="px-2.5 md:px-3.5 py-2 md:py-3">
                 {run.status === "running" ? (
                     <div className="relative overflow-hidden rounded-md dark:bg-[#2c313c]/50 min-h-[120px]">
-                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-[#4fc3f7]/10 to-transparent" style={{ animation: 'shimmer 2s infinite' }}></div>
+                        <div className="absolute inset-0 bg-linear-to-r from-transparent via-[#4fc3f7]/10 to-transparent" style={{ animation: 'shimmer 2s infinite' }}></div>
                         <div className="relative flex items-center justify-center h-full">
                             <div className="absolute inset-0 bg-[#4fc3f7]/20 blur-xl rounded-full animate-pulse"></div>
                         </div>
